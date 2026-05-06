@@ -1,0 +1,89 @@
+name: "neozip: Configure"
+
+on:
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+
+jobs:
+  configure:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu GCC
+            os: ubuntu-latest
+            compiler: gcc
+            cflags: ""
+            ldflags: ""
+            configure-args: --warn
+
+          - name: Ubuntu Clang
+            os: ubuntu-latest
+            compiler: clang
+            configure-args: --warn
+
+          - name: Ubuntu GCC Compat
+            os: ubuntu-latest
+            compiler: gcc
+            configure-args: --warn --zlib-compat
+
+          - name: macOS Clang
+            os: macos-latest
+            compiler: clang
+            configure-args: --warn
+
+          - name: macOS Clang Compat
+            os: macos-latest
+            compiler: clang
+            configure-args: --warn --zlib-compat
+
+    steps:
+      - name: Checkout repository
+        uses: Project-Tick/Project-Tick/.github/actions/source-checkout@master
+        with:
+          show-progress: 'false'
+
+      - name: Install packages (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+        env:
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+      - name: Generate project files
+        working-directory: neozip
+        run: ./configure ${{ matrix.configure-args }}
+        env:
+          CC: ${{ matrix.compiler }}
+          CFLAGS: ${{ matrix.cflags }}
+          LDFLAGS: ${{ matrix.ldflags }}
+          CI: true
+
+      - name: Compile source code
+        run: make -j5
+        working-directory: neozip
+
+      - name: Run test cases
+        run: make test
+        working-directory: neozip
+
+      - name: Upload build errors
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ${{ matrix.name }} (configure)
+          path: |
+            neozip/Makefile
+            neozip/configure.log
+          retention-days: 30

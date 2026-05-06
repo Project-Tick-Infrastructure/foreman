@@ -1,0 +1,109 @@
+name: "images4docker: Build"
+
+on:
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.make.outputs.matrix }}
+      count: ${{ steps.make.outputs.count }}
+    steps:
+      - uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+      - id: make
+        run: |
+          set -euo pipefail
+
+          entries=()
+          DOCKER_DIR="${{ inputs.source-repository != '' && 'dockerfiles' || 'images4docker/dockerfiles' }}"
+          for f in "$DOCKER_DIR"/*.Dockerfile; do
+            name="$(basename "$f" .Dockerfile)"
+            entries+=("$name|$f")
+          done
+
+          json='{"include":['
+          first=true
+          for entry in "${entries[@]}"; do
+            IFS='|' read -r name dockerfile <<< "$entry"
+            $first || json+=','
+            first=false
+            json+="{\"name\":\"$name\",\"dockerfile\":\"$dockerfile\"}"
+          done
+          json+=']}'
+
+          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+          echo "count=${#entries[@]}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.count != '0'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tagmeta
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA::12}"
+          ts="$(date -u +%Y%m%d-%H%M%S)"
+          echo "sha_tag=sha-${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "immutable_tag=${ts}-r${GITHUB_RUN_ID}-a${GITHUB_RUN_ATTEMPT}-${short_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        uses: docker/build-push-action@v7.1.0
+        with:
+          context: ${{ inputs.source-repository != '' && '.' || 'images4docker' }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          provenance: false
+          tags: |
+            ghcr.io/project-tick/project-tick/${{ matrix.name }}:latest
+            ghcr.io/project-tick/project-tick/${{ matrix.name }}:${{ steps.tagmeta.outputs.sha_tag }}
+            ghcr.io/project-tick/project-tick/${{ matrix.name }}:${{ steps.tagmeta.outputs.immutable_tag }}
+
+      - name: Push image (with retry)
+        run: |
+          push_all() {
+            docker push "ghcr.io/project-tick/project-tick/${{ matrix.name }}:latest" \
+              && docker push "ghcr.io/project-tick/project-tick/${{ matrix.name }}:${{ steps.tagmeta.outputs.sha_tag }}" \
+              && docker push "ghcr.io/project-tick/project-tick/${{ matrix.name }}:${{ steps.tagmeta.outputs.immutable_tag }}"
+          }
+          for attempt in 1 2 3 4 5; do
+            push_all && exit 0
+            echo "Push attempt $attempt/5 failed, retrying in 30s..."
+            sleep 30
+          done
+          exit 1

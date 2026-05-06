@@ -1,0 +1,992 @@
+# Copyright (C) Project Tick
+# SPDX-License-Identifier: MIT
+#
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Project Tick — Monolithic CI Orchestrator                       ║
+# ║                                                                  ║
+# ║  Every bot-dispatched push, pull request, merge queue entry,     ║
+# ║  and manual dispatch flow through this single gate. Nothing      ║
+# ║  unless this file says so.                                       ║
+# ╚══════════════════════════════════════════════════════════════════╝
+
+name: CI
+
+on:
+  pull_request_target:
+    types: [closed, labeled]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+    inputs:
+      force-all:
+        description: "Force run all project CI pipelines"
+        type: boolean
+        default: false
+      build-type:
+        description: "Build configuration for meshmc/forgewrapper"
+        type: choice
+        options: [Debug, Release]
+        default: Debug
+      source-repository:
+        description: "Optional external repository URL to fetch source from"
+        type: string
+        default: ""
+      source-ref:
+        description: "Optional external ref to fetch when source-repository is set"
+        type: string
+        default: ""
+      event-name:
+        description: "Original event name when dispatched by the bot"
+        type: string
+        default: ""
+      event-actor:
+        description: "Original actor login when dispatched by the bot"
+        type: string
+        default: ""
+      source-sha:
+        description: "Original source SHA when dispatched by the bot"
+        type: string
+        default: ""
+      before-sha:
+        description: "Original push before SHA when dispatched by the bot"
+        type: string
+        default: ""
+      head-ref:
+        description: "Original head ref when dispatched by the bot"
+        type: string
+        default: ""
+      base-ref:
+        description: "Original base ref when dispatched by the bot"
+        type: string
+        default: ""
+      pr-number:
+        description: "Original PR number when dispatched by the bot"
+        type: string
+        default: ""
+      pr-base-sha:
+        description: "Original PR base SHA when dispatched by the bot"
+        type: string
+        default: ""
+      pr-head-sha:
+        description: "Original PR head SHA when dispatched by the bot"
+        type: string
+        default: ""
+      pr-title:
+        description: "Original PR title when dispatched by the bot"
+        type: string
+        default: ""
+      pr-draft:
+        description: "Original PR draft flag when dispatched by the bot"
+        type: string
+        default: ""
+      callback_url:
+        description: "Optional Foreman callback base URL"
+        type: string
+        default: ""
+      callback_token:
+        description: "Optional Foreman callback bearer token"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# ╔════════════════════════════════════════════════════════════════╗
+# ║ Environment — shared across all jobs                           ║
+# ╚════════════════════════════════════════════════════════════════╝
+env:
+  CI: true
+  CI_EVENT_NAME: ${{ github.event.inputs.event-name || github.event_name }}
+  CI_REF: ${{ github.event.inputs.source-ref || github.ref }}
+  CI_SHA: ${{ github.event.inputs.source-sha || github.sha }}
+  CI_BEFORE_SHA: ${{ github.event.inputs.before-sha || github.event.before || '' }}
+  CI_ACTOR: ${{ github.event.inputs.event-actor || github.actor }}
+  CI_HEAD_REF: ${{ github.event.inputs.head-ref || github.head_ref || '' }}
+  CI_BASE_REF: ${{ github.event.inputs.base-ref || github.base_ref || '' }}
+  CI_PR_NUMBER: ${{ github.event.inputs.pr-number || github.event.pull_request.number || '' }}
+  CI_PR_BASE_SHA: ${{ github.event.inputs.pr-base-sha || github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+  CI_PR_HEAD_SHA: ${{ github.event.inputs.pr-head-sha || github.event.pull_request.head.sha || github.event.merge_group.head_sha || '' }}
+  CI_PR_TITLE: ${{ github.event.inputs.pr-title || github.event.pull_request.title || '' }}
+  CI_PR_DRAFT: ${{ github.event.inputs.pr-draft || (github.event.pull_request.draft && 'true' || 'false') }}
+  CI_MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref || '' }}
+  FORCE_ALL: ${{ github.event.inputs.force-all == 'true' || (github.event.inputs.event-name || github.event_name) == 'merge_group' }}
+
+jobs:
+  callback-start:
+    name: "Callback Start"
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    outputs:
+      callback_url: ${{ steps.prepare.outputs.callback_url }}
+      cb_auth: ${{ steps.prepare.outputs.cb_auth }}
+      pipeline_id: ${{ steps.prepare.outputs.pipeline_id }}
+    permissions: {}
+    steps:
+      - name: Prepare callback destination
+        id: prepare
+        shell: bash
+        env:
+          INPUT_CALLBACK_URL: ${{ github.event.inputs.callback_url || '' }}
+          INPUT_CALLBACK_TOKEN: ${{ github.event.inputs.callback_token || '' }}
+          FOREMAN_BASE_URL: ${{ vars.FOREMAN_BASE_URL || 'https://builds.projecttick.net' }}
+          FOREMAN_API_TOKEN: ${{ secrets.FOREMAN_API_TOKEN || '' }}
+          EVENT_NAME: ${{ env.CI_EVENT_NAME }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_REPOSITORY: ${{ github.event.inputs.source-repository || '' }}
+          REF: ${{ env.CI_REF }}
+          SHA: ${{ env.CI_SHA }}
+          PR_NUMBER: ${{ env.CI_PR_NUMBER }}
+          PR_HEAD_SHA: ${{ env.CI_PR_HEAD_SHA }}
+          PR_TARGET_BRANCH: ${{ env.CI_BASE_REF }}
+          MERGE_GROUP_BASE_REF: ${{ env.CI_MERGE_GROUP_BASE_REF }}
+        run: |
+          set -euo pipefail
+
+          callback_url=""
+          callback_token=""
+          pipeline_id=""
+
+          if [[ -n "$INPUT_CALLBACK_URL" && -n "$INPUT_CALLBACK_TOKEN" ]]; then
+            callback_url="$INPUT_CALLBACK_URL"
+            callback_token="$INPUT_CALLBACK_TOKEN"
+          elif [[ -n "$FOREMAN_API_TOKEN" && ( "$EVENT_NAME" == "push" || "$EVENT_NAME" == "pull_request" || "$EVENT_NAME" == "merge_group" ) ]]; then
+            if [[ -n "$SOURCE_REPOSITORY" ]]; then
+              app_id="$(basename "$SOURCE_REPOSITORY" .git)"
+              repo="$SOURCE_REPOSITORY"
+            else
+              app_id="${REPOSITORY#*/}"
+              repo="$REPOSITORY"
+            fi
+
+            payload="$(jq -nc \
+              --arg app_id "$app_id" \
+              --arg repo "$repo" \
+              --arg ref "$REF" \
+              --arg sha "$SHA" \
+              --arg event_name "$EVENT_NAME" \
+              --arg pr_number "$PR_NUMBER" \
+              --arg pr_head_sha "$PR_HEAD_SHA" \
+              --arg pr_target_branch "$PR_TARGET_BRANCH" \
+              --arg merge_group_base_ref "$MERGE_GROUP_BASE_REF" \
+              '{
+                app_id: $app_id,
+                params: (
+                  {
+                    repo: $repo,
+                    ref: (
+                      if $event_name == "pull_request" and $pr_number != "" then
+                        "refs/pull/\($pr_number)/head"
+                      else
+                        $ref
+                      end
+                    ),
+                    sha: (
+                      if $event_name == "pull_request" and $pr_head_sha != "" then
+                        $pr_head_sha
+                      else
+                        $sha
+                      end
+                    ),
+                    native_github_ci: "true"
+                  }
+                  + (
+                    if $event_name == "pull_request" and $pr_number != "" then
+                      {
+                        pr_number: $pr_number,
+                        pr_target_branch: $pr_target_branch
+                      }
+                    elif $event_name == "merge_group" and $merge_group_base_ref != "" then
+                      {
+                        pr_target_branch: $merge_group_base_ref
+                      }
+                    else
+                      {}
+                    end
+                  )
+                )
+              }')"
+
+            if register_response="$(curl \
+              --silent \
+              --show-error \
+              --fail \
+              --retry 3 \
+              --retry-all-errors \
+              --request POST \
+              --header "Authorization: Bearer $FOREMAN_API_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "$payload" \
+              "${FOREMAN_BASE_URL%/}/api/pipelines/external")"; then
+              callback_url="$(printf '%s' "$register_response" | jq -r '.callback_url // ""')"
+              callback_token="$(printf '%s' "$register_response" | jq -r '.callback_token // ""')"
+              pipeline_id="$(printf '%s' "$register_response" | jq -r '.pipeline_id // ""')"
+
+            else
+              echo "::warning::Failed to register this workflow run in Foreman."
+            fi
+          else
+            echo "No Foreman callback destination configured for this event."
+          fi
+
+          if [[ -z "$pipeline_id" && -n "$callback_url" ]]; then
+            pipeline_id="$(printf '%s' "$callback_url" | sed -nE 's#^.*/api/pipelines/([0-9a-fA-F-]+)/callback/?$#\1#p')"
+          fi
+
+          if [[ -n "$callback_token" ]]; then
+            echo "::add-mask::$callback_token"
+          fi
+
+          {
+            echo "callback_url=$callback_url"
+            echo "cb_auth=$callback_token"
+            echo "pipeline_id=$pipeline_id"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Report workflow run URL
+        if: steps.prepare.outputs.callback_url != '' && steps.prepare.outputs.cb_auth != ''
+        shell: bash
+        env:
+          CALLBACK_URL: ${{ steps.prepare.outputs.callback_url }}
+          CALLBACK_TOKEN: ${{ steps.prepare.outputs.cb_auth }}
+          RUN_URL: ${{ format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) }}
+        run: |
+          set -euo pipefail
+
+          payload="$(printf '{\"log_url\":\"%s\"}' "$RUN_URL")"
+
+          curl \
+            --silent \
+            --show-error \
+            --fail \
+            --retry 3 \
+            --retry-all-errors \
+            --request POST \
+            --header "Authorization: Bearer $CALLBACK_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "$payload" \
+            "${CALLBACK_URL%/}/log_url"
+
+  # ╔════════════════════════════════════════════════════════════════╗
+  # ║  STAGE 0 — Gate & Triage                                       ║
+  # ╚════════════════════════════════════════════════════════════════╝
+
+  gate:
+    name: "Gate"
+    needs: callback-start
+    runs-on: ubuntu-latest
+    if: always()
+    outputs:
+      run_level: ${{ steps.plan.outputs.run_level }}
+      changed_projects: ${{ steps.plan.outputs.changed_projects }}
+      build_type: ${{ steps.plan.outputs.build_type }}
+      jobs_json: ${{ steps.plan.outputs.jobs_json }}
+
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Resolve plan from Foreman
+        id: plan
+        shell: bash
+        env:
+          FOREMAN_BASE_URL: ${{ vars.FOREMAN_BASE_URL || 'https://builds.projecttick.net' }}
+          FOREMAN_API_TOKEN: ${{ secrets.FOREMAN_API_TOKEN || '' }}
+          CALLBACK_TOKEN: ${{ needs.callback-start.outputs.cb_auth || '' }}
+          PIPELINE_ID: ${{ needs.callback-start.outputs.pipeline_id || '' }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_REPOSITORY: ${{ github.event.inputs.source-repository || '' }}
+          SOURCE_REF: ${{ env.CI_REF }}
+          SOURCE_SHA: ${{ env.CI_SHA }}
+          EVENT_NAME: ${{ env.CI_EVENT_NAME }}
+          ACTOR: ${{ env.CI_ACTOR }}
+          BEFORE_SHA: ${{ env.CI_BEFORE_SHA }}
+          HEAD_REF: ${{ env.CI_HEAD_REF }}
+          BASE_REF: ${{ env.CI_BASE_REF }}
+          PR_NUMBER: ${{ env.CI_PR_NUMBER }}
+          PR_BASE_SHA: ${{ env.CI_PR_BASE_SHA }}
+          PR_HEAD_SHA: ${{ env.CI_PR_HEAD_SHA }}
+          PR_TITLE: ${{ env.CI_PR_TITLE }}
+          PR_DRAFT: ${{ env.CI_PR_DRAFT }}
+          PR_MERGED: ${{ github.event.pull_request.merged && 'true' || 'false' }}
+          PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          MERGE_GROUP_BASE_REF: ${{ env.CI_MERGE_GROUP_BASE_REF }}
+          FORCE_ALL: ${{ env.FORCE_ALL }}
+          BUILD_TYPE_INPUT: ${{ github.event.inputs.build-type || '' }}
+          SCHEDULE: ${{ github.event.schedule || '' }}
+        run: |
+          set -euo pipefail
+
+          plan_file="$(mktemp)"
+
+          if [[ -n "$PIPELINE_ID" && -n "$CALLBACK_TOKEN" ]]; then
+            curl \
+              --silent \
+              --show-error \
+              --fail \
+              --retry 3 \
+              --retry-all-errors \
+              --header "Authorization: Bearer $CALLBACK_TOKEN" \
+              "${FOREMAN_BASE_URL%/}/api/pipelines/$PIPELINE_ID/ci-plan" \
+              > "$plan_file"
+          else
+            if [[ -z "$FOREMAN_API_TOKEN" ]]; then
+              echo "::error::FOREMAN_API_TOKEN is required to resolve the CI plan for this event."
+              exit 1
+            fi
+
+            payload="$(jq -nc \
+              --arg workflow_name "$WORKFLOW_NAME" \
+              --arg repository "${SOURCE_REPOSITORY:-$REPOSITORY}" \
+              --arg source_repository "$SOURCE_REPOSITORY" \
+              --arg source_ref "$SOURCE_REF" \
+              --arg source_sha "$SOURCE_SHA" \
+              --arg event_name "$EVENT_NAME" \
+              --arg actor "$ACTOR" \
+              --arg before_sha "$BEFORE_SHA" \
+              --arg head_ref "$HEAD_REF" \
+              --arg base_ref "$BASE_REF" \
+              --arg pr_number "$PR_NUMBER" \
+              --arg pr_base_sha "$PR_BASE_SHA" \
+              --arg pr_head_sha "$PR_HEAD_SHA" \
+              --arg pr_title "$PR_TITLE" \
+              --arg pr_draft "$PR_DRAFT" \
+              --arg pr_merged "$PR_MERGED" \
+              --arg pr_labels_json "${PR_LABELS_JSON:-null}" \
+              --arg merge_group_base_ref "$MERGE_GROUP_BASE_REF" \
+              --arg force_all "$FORCE_ALL" \
+              --arg build_type "$BUILD_TYPE_INPUT" \
+              --arg schedule "$SCHEDULE" \
+              '{
+                workflow_name: $workflow_name,
+                repository: $repository,
+                source_repository: $source_repository,
+                source_ref: $source_ref,
+                source_sha: $source_sha,
+                event_name: $event_name,
+                actor: $actor,
+                before_sha: $before_sha,
+                head_ref: $head_ref,
+                base_ref: $base_ref,
+                pr_number: $pr_number,
+                pr_base_sha: $pr_base_sha,
+                pr_head_sha: $pr_head_sha,
+                pr_title: $pr_title,
+                pr_draft: ($pr_draft == "true"),
+                pr_merged: ($pr_merged == "true"),
+                pr_labels: ($pr_labels_json | fromjson? // []),
+                merge_group_base_ref: $merge_group_base_ref,
+                force_all: ($force_all == "true"),
+                build_type: $build_type,
+                schedule: $schedule
+              }')"
+
+            curl \
+              --silent \
+              --show-error \
+              --fail \
+              --retry 3 \
+              --retry-all-errors \
+              --request POST \
+              --header "Authorization: Bearer $FOREMAN_API_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "$payload" \
+              "${FOREMAN_BASE_URL%/}/api/ci/github/gate-plan" \
+              > "$plan_file"
+          fi
+
+          {
+            echo "run_level=$(jq -r '.run_level' "$plan_file")"
+            echo "changed_projects=$(jq -r '.changed_projects // ""' "$plan_file")"
+            echo "build_type=$(jq -r '.build_type' "$plan_file")"
+            echo "jobs_json=$(jq -c '.jobs' "$plan_file")"
+          } >> "$GITHUB_OUTPUT"
+
+          runnable_jobs="$(jq -r '[.jobs | to_entries[] | select(.value == true) | .key] | join(", ")' "$plan_file")"
+
+          {
+            echo "## Foreman CI Plan"
+            echo ""
+            echo "- Run level: $(jq -r '.run_level' "$plan_file")"
+            echo "- Changed projects: $(jq -r '.changed_projects // ""' "$plan_file")"
+            echo "- Runnable jobs: ${runnable_jobs:-none}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ╔════════════════════════════════════════════════════════════════╗
+  # ║  STAGE 1 — Lint & Commit Checks (fast, blocks everything)      ║
+  # ╚════════════════════════════════════════════════════════════════╝
+
+  lint:
+    name: "Lint"
+    needs: gate
+    if: fromJSON(needs.gate.outputs.jobs_json).lint
+    uses: ./.github/workflows/ci-lint.yml
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      run-level: ${{ needs.gate.outputs.run_level }}
+      changed-projects: ${{ needs.gate.outputs.changed_projects }}
+    secrets: inherit
+
+  # ╔════════════════════════════════════════════════════════════════╗
+  # ║  STAGE 2 — Per-Project Build & Test Matrices                   ║
+  # ║                                                                ║
+  # ║  Each project runs only when its directory changed, or when    ║
+  # ║  force-all / merge-queue / master push triggers them all.      ║
+  # ║  Inner reusable workflows handle their own matrices.           ║
+  # ╚════════════════════════════════════════════════════════════════╝
+
+  # ── C / System Projects ─────────────────────────────────────────
+  mnv:
+    name: "MNV"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).mnv
+    uses: ./.github/workflows/mnv-ci.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  cgit:
+    name: "CGit"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).cgit
+    uses: ./.github/workflows/cgit-ci.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  cmark:
+    name: "CMark"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).cmark
+    uses: ./.github/workflows/cmark-ci.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  corebinutils:
+    name: "CoreBinutils"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).corebinutils
+    uses: ./.github/workflows/corebinutils-ci.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  genqrcode:
+    name: "GenQRCode"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).genqrcode
+    uses: ./.github/workflows/genqrcode-ci.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  neozip:
+    name: "NeoZip"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).neozip
+    uses: ./.github/workflows/neozip-ci.yml
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  # ── C++ / Library Projects ──────────────────────────────────────
+  json4cpp:
+    name: "JSON4CPP"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).json4cpp
+    uses: ./.github/workflows/json4cpp-ci.yml
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  libnbtplusplus:
+    name: "libNBT++"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).libnbtplusplus
+    uses: ./.github/workflows/libnbtplusplus-ci.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  tomlplusplus:
+    name: "TOML++"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).tomlplusplus
+    uses: ./.github/workflows/tomlplusplus-ci.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  # ── Java / Minecraft Projects ───────────────────────────────────
+  meshmc:
+    name: "MeshMC"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).meshmc
+    uses: ./.github/workflows/meshmc-build.yml
+    with:
+      build-type: ${{ needs.gate.outputs.build_type }}
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    secrets: inherit
+
+  forgewrapper:
+    name: "ForgeWrapper"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).forgewrapper
+    uses: ./.github/workflows/forgewrapper-build.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  # ── Container & Docker ──────────────────────────────────────────
+  images4docker:
+    name: "Docker Images"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).images4docker
+    uses: ./.github/workflows/images4docker-build.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  # ╔════════════════════════════════════════════════════════════════╗
+  # ║  STAGE 3 — Extended Analysis (only on full runs)               ║
+  # ║                                                                ║
+  # ║  Fuzz testing, CodeQL, static analysis — expensive jobs that   ║
+  # ║  run on merge queue, master, or manual dispatch only.          ║
+  # ╚════════════════════════════════════════════════════════════════╝
+
+  cmark-fuzz:
+    name: "CMark Fuzz"
+    needs: [gate, cmark]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.cmark.result == 'success' &&
+      fromJSON(needs.gate.outputs.jobs_json).cmark_fuzz
+    uses: ./.github/workflows/cmark-fuzz.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  json4cpp-fuzz:
+    name: "JSON4CPP Fuzz"
+    needs: [gate, json4cpp]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.json4cpp.result == 'success' &&
+      fromJSON(needs.gate.outputs.jobs_json).json4cpp_fuzz
+    uses: ./.github/workflows/json4cpp-fuzz.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  json4cpp-amalgam:
+    name: "JSON4CPP Amalgamation"
+    needs: [gate, json4cpp]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.json4cpp.result == 'success' &&
+      fromJSON(needs.gate.outputs.jobs_json).json4cpp_amalgam
+    uses: ./.github/workflows/json4cpp-amalgam.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  tomlplusplus-fuzz:
+    name: "TOML++ Fuzz"
+    needs: [gate, tomlplusplus]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.tomlplusplus.result == 'success' &&
+      fromJSON(needs.gate.outputs.jobs_json).tomlplusplus_fuzz
+    uses: ./.github/workflows/tomlplusplus-fuzz.yml
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  neozip-fuzz:
+    name: "NeoZip Fuzz"
+    needs: [gate, neozip]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.neozip.result == 'success' &&
+      fromJSON(needs.gate.outputs.jobs_json).neozip_fuzz
+    uses: ./.github/workflows/neozip-fuzz.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  mnv-codeql:
+    name: "MNV CodeQL"
+    needs: [gate, mnv]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.mnv.result == 'success' &&
+      fromJSON(needs.gate.outputs.jobs_json).mnv_codeql
+    uses: ./.github/workflows/mnv-codeql.yml
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  neozip-codeql:
+    name: "NeoZip CodeQL"
+    needs: [gate, neozip]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.neozip.result == 'success' &&
+      fromJSON(needs.gate.outputs.jobs_json).neozip_codeql
+    uses: ./.github/workflows/neozip-codeql.yml
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  # ╔════════════════════════════════════════════════════════════════╗
+  # ║  STAGE 4 — Containers & Nix (only on full + meshmc changes)    ║
+  # ╚════════════════════════════════════════════════════════════════╝
+
+  meshmc-container:
+    name: "MeshMC Container"
+    needs: [gate, meshmc]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.meshmc.result == 'success' &&
+      fromJSON(needs.gate.outputs.jobs_json).meshmc_container
+    uses: ./.github/workflows/meshmc-container.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  meshmc-nix:
+    name: "MeshMC Nix"
+    needs: [gate, meshmc]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.meshmc.result == 'success' &&
+      fromJSON(needs.gate.outputs.jobs_json).meshmc_nix
+    uses: ./.github/workflows/meshmc-nix.yml
+    permissions:
+      contents: read
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+    secrets: inherit
+
+  # ╔════════════════════════════════════════════════════════════════╗
+  # ║  STAGE 7 — Release (tag pushes only)                           ║
+  # ╚════════════════════════════════════════════════════════════════╝
+
+  release-sources:
+    name: "Release Sources"
+    needs: gate
+    if: fromJSON(needs.gate.outputs.jobs_json).release_sources
+    uses: ./.github/workflows/release-sources.yml
+    with:
+      source-ref: ${{ github.event.inputs.source-ref || github.ref }}
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+      beta_source_only: ${{ fromJSON(needs.gate.outputs.jobs_json).beta_source_only }}
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    secrets: inherit
+
+  # ╔════════════════════════════════════════════════════════════════╗
+  # ║  STAGE 8 — Final Verdicts                                      ║
+  # ║                                                                ║
+  # ║  Merge queue and branch protection rules check this job.       ║
+  # ║  It collects results from all stages and reports pass/fail.    ║
+  # ╚════════════════════════════════════════════════════════════════╝
+
+  verdict:
+    name: "CI Verdict"
+    if: always()
+    needs:
+      - gate
+      - lint
+      - mnv
+      - cgit
+      - cmark
+      - corebinutils
+      - genqrcode
+      - neozip
+      - json4cpp
+      - libnbtplusplus
+      - tomlplusplus
+      - meshmc
+      - forgewrapper
+      - images4docker
+      - cmark-fuzz
+      - json4cpp-fuzz
+      - json4cpp-amalgam
+      - tomlplusplus-fuzz
+      - neozip-fuzz
+      - mnv-codeql
+      - neozip-codeql
+      - meshmc-container
+      - meshmc-nix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate results
+        run: |
+          # shellcheck disable=SC2129
+          set -euo pipefail
+
+          {
+            echo "## CI Verdict"
+            echo ""
+            echo "| Job | Result |"
+            echo "|-----|--------|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          FAILED=false
+
+          check_job() {
+            local name="$1"
+            local result="$2"
+            local icon="⬜"
+            case "$result" in
+              success)  icon="✅" ;;
+              failure)  icon="❌"; FAILED=true ;;
+              cancelled) icon="⏹️" ;;
+              skipped)  icon="⏭️" ;;
+            esac
+            echo "| $name | $icon $result |" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          check_job "Gate"           "${{ needs.gate.result }}"
+          check_job "Lint"           "${{ needs.lint.result }}"
+          check_job "MNV"            "${{ needs.mnv.result }}"
+          check_job "CGit"           "${{ needs.cgit.result }}"
+          check_job "CMark"          "${{ needs.cmark.result }}"
+          check_job "CoreBinutils"   "${{ needs.corebinutils.result }}"
+          check_job "GenQRCode"      "${{ needs.genqrcode.result }}"
+          check_job "NeoZip"         "${{ needs.neozip.result }}"
+          check_job "JSON4CPP"       "${{ needs.json4cpp.result }}"
+          check_job "libNBT++"       "${{ needs.libnbtplusplus.result }}"
+          check_job "TOML++"         "${{ needs.tomlplusplus.result }}"
+          check_job "MeshMC"         "${{ needs.meshmc.result }}"
+          check_job "ForgeWrapper"   "${{ needs.forgewrapper.result }}"
+          check_job "Docker Images"  "${{ needs.images4docker.result }}"
+          check_job "CMark Fuzz"     "${{ needs.cmark-fuzz.result }}"
+          check_job "JSON4CPP Fuzz"  "${{ needs.json4cpp-fuzz.result }}"
+          check_job "JSON4CPP Amalg" "${{ needs.json4cpp-amalgam.result }}"
+          check_job "TOML++ Fuzz"    "${{ needs.tomlplusplus-fuzz.result }}"
+          check_job "NeoZip Fuzz"    "${{ needs.neozip-fuzz.result }}"
+          check_job "MNV CodeQL"     "${{ needs.mnv-codeql.result }}"
+          check_job "NeoZip CodeQL"  "${{ needs.neozip-codeql.result }}"
+          check_job "MeshMC Docker"  "${{ needs.meshmc-container.result }}"
+          check_job "MeshMC Nix"     "${{ needs.meshmc-nix.result }}"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$FAILED" == "true" ]]; then
+            echo "**Result: FAILED** — one or more required jobs failed." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          else
+            echo "**Result: PASSED** — all executed jobs succeeded." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  callback-status:
+    name: "Callback Status"
+    needs:
+      - callback-start
+      - gate
+      - lint
+      - mnv
+      - cgit
+      - cmark
+      - corebinutils
+      - genqrcode
+      - neozip
+      - json4cpp
+      - libnbtplusplus
+      - tomlplusplus
+      - meshmc
+      - forgewrapper
+      - images4docker
+      - cmark-fuzz
+      - json4cpp-fuzz
+      - json4cpp-amalgam
+      - tomlplusplus-fuzz
+      - neozip-fuzz
+      - mnv-codeql
+      - neozip-codeql
+      - meshmc-container
+      - meshmc-nix
+      - verdict
+      - release-sources
+    if: >-
+      always() &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        github.event_name == 'merge_group'
+      )
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Resolve cancelled workflow status
+        id: resolve-status-cancelled
+        if: ${{ cancelled() }}
+        shell: bash
+        run: echo "status=cancelled" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve final workflow status
+        id: resolve-status
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+
+          status="success"
+          if jq -e 'to_entries[] | select(.key != "callback-start" and .value.result == "failure")' <<< "$NEEDS_JSON" >/dev/null; then
+            status="failure"
+          elif jq -e 'to_entries[] | select(.key != "callback-start" and .value.result == "cancelled")' <<< "$NEEDS_JSON" >/dev/null; then
+            status="cancelled"
+          fi
+
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Report final workflow status
+        if: ${{ always() }}
+        shell: bash
+        env:
+          CALLBACK_URL: ${{ needs.callback-start.outputs.callback_url }}
+          PIPELINE_ID: ${{ needs.callback-start.outputs.pipeline_id }}
+          FOREMAN_BASE_URL: ${{ vars.FOREMAN_BASE_URL || 'https://builds.projecttick.net' }}
+          FOREMAN_API_TOKEN: ${{ secrets.FOREMAN_API_TOKEN || '' }}
+          PIPELINE_STATUS: ${{ steps.resolve-status-cancelled.outputs.status || steps.resolve-status.outputs.status || 'failure' }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$PIPELINE_ID" || -z "$FOREMAN_API_TOKEN" ]]; then
+            echo "Callback pipeline/admin token missing; skipping callback status report."
+            exit 0
+          fi
+
+          payload="$(printf '{\"status\":\"%s\"}' "$PIPELINE_STATUS")"
+
+          curl \
+            --silent \
+            --show-error \
+            --fail \
+            --retry 3 \
+            --retry-all-errors \
+            --request POST \
+            --header "Authorization: Bearer $FOREMAN_API_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "$payload" \
+            "${FOREMAN_BASE_URL%/}/api/pipelines/${PIPELINE_ID}/admin-callback/status"

@@ -1,0 +1,81 @@
+name: "neozip: Pigz"
+
+on:
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+
+jobs:
+  pigz:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu GCC
+            os: ubuntu-latest
+            compiler: gcc
+            cmake-args: ""
+
+          - name: Ubuntu Clang
+            os: ubuntu-latest
+            compiler: clang
+            packages: llvm-15 llvm-15-tools
+
+          - name: Ubuntu GCC AARCH64
+            os: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+          show-progress: 'false'
+
+      - name: Install packages (Ubuntu)
+        if: runner.os == 'Linux' && matrix.packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.packages }}
+
+      - name: Generate project files
+        run: |
+          cmake ${{ matrix.cmake-args }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DZLIB_ROOT=../.. \
+            -DWITH_CODE_COVERAGE=OFF \
+            -DWITH_MAINTAINER_WARNINGS=ON
+        working-directory: neozip/test/pigz
+        env:
+          CC: ${{ matrix.compiler }}
+          CI: true
+
+      - name: Compile source code
+        run: cmake --build . -j5 --config Release
+        working-directory: neozip/test/pigz
+
+      - name: Run test cases
+        run: ctest --verbose -C Release --output-on-failure --max-width 120 -j 5
+        working-directory: neozip/test/pigz
+
+      - name: Upload build errors
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ${{ matrix.name }} (pigz)
+          path: |
+            **/CMakeFiles/CMakeOutput.log
+            **/CMakeFiles/CMakeError.log
+            **/Testing/Temporary/*
+          retention-days: 30

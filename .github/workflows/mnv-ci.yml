@@ -1,0 +1,256 @@
+name: "mnv: CI"
+
+on:
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ${{ matrix.architecture == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+
+    env:
+      CC: ${{ matrix.compiler }}
+      GCC_VER: 14
+      CLANG_VER: 21
+      TEST: test
+      SRCDIR: ./src
+      LEAK_CFLAGS: -DEXITFREE
+      LOG_DIR: ${{ github.workspace }}/logs
+      TERM: xterm
+      DISPLAY: ':99'
+      DEBIAN_FRONTEND: noninteractive
+
+    strategy:
+      fail-fast: false
+      matrix:
+        features: [tiny, normal, huge]
+        compiler: [clang, gcc]
+        extra: [[]]
+        architecture: [native]
+        include:
+          - features: tiny
+            compiler: clang
+            extra: [nogui]
+          - features: tiny
+            compiler: gcc
+            extra: [nogui]
+          - features: tiny
+            compiler: gcc
+            extra: [nogui]
+            architecture: arm64
+          - features: huge
+            coverage: true
+          - features: huge
+            compiler: clang
+            interface: dynamic
+            python3: stable-abi
+          - features: huge
+            compiler: gcc
+            coverage: true
+            interface: dynamic
+            extra: [uchar, testgui]
+          - features: huge
+            compiler: gcc
+            coverage: true
+            extra: [unittests]
+          - features: huge
+            compiler: gcc
+            coverage: true
+            extra: [unittests]
+            architecture: arm64
+          - features: normal
+            compiler: gcc
+            extra: [vimtags, proto, codestyle]
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.source-repository != '' && '.' || 'mnv' }}
+
+    steps:
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            autoconf \
+            clang \
+            lcov \
+            gettext \
+            libcanberra-dev \
+            libperl-dev \
+            python3-dev \
+            liblua5.4-dev \
+            lua5.4 \
+            ruby-dev \
+            tcl-dev \
+            libsodium-dev \
+            libgtk-3-dev \
+            desktop-file-utils \
+            libtool-bin
+
+      - name: Build
+        run: |
+          if [ "${{ matrix.features }}" = "tiny" ]; then
+            ./configure --with-features=tiny --disable-gui
+          elif [ "${{ matrix.features }}" = "normal" ]; then
+            ./configure --with-features=normal --disable-gui
+          else
+            ./configure --with-features=huge \
+              --enable-perlinterp \
+              --enable-pythoninterp \
+              --enable-python3interp \
+              --enable-rubyinterp \
+              --enable-luainterp \
+              --enable-tclinterp \
+              --enable-gui=gtk3
+          fi
+          make -j"$(nproc)"
+
+      - name: Test
+        timeout-minutes: 25
+        run: |
+          make "$TEST"
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: ./.github/actions/mnv/test_artifacts
+
+  cmake-linux:
+    runs-on: ubuntu-24.04
+
+    env:
+      CC: ${{ matrix.compiler }}
+      CXX: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
+      DEBIAN_FRONTEND: noninteractive
+      TERM: xterm
+      DISPLAY: ':99'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        preset:
+          - default
+          - minimal
+          - normal
+          - all-interp
+          - all-interp-static
+          - lua-only
+          - python3-only
+          - ruby-only
+          - perl-only
+          - tcl-only
+          - nogui
+          - gtk3
+          - sanitize
+          - profile
+          - full-debug
+        compiler: [gcc, clang]
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.source-repository != '' && '.' || 'mnv' }}
+
+    steps:
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            cmake \
+            clang \
+            gettext \
+            libcanberra-dev \
+            libperl-dev \
+            python3-dev \
+            liblua5.4-dev \
+            lua5.4 \
+            ruby-dev \
+            tcl-dev \
+            libsodium-dev \
+            libgtk-3-dev \
+            libxt-dev \
+            desktop-file-utils \
+            libtool-bin
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} -- -j"$(nproc)"
+
+      - name: Start virtual display
+        if: contains(fromJSON('["default", "all-interp", "full-debug"]'), matrix.preset)
+        run: Xvfb :99 -screen 0 1024x768x24 &
+
+      - name: Test
+        if: contains(fromJSON('["default", "all-interp", "full-debug"]'), matrix.preset)
+        timeout-minutes: 120
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure --extra-verbose
+
+  macos:
+    runs-on: ${{ matrix.runner }}
+
+    env:
+      CC: clang
+      TEST: test
+      SRCDIR: ./src
+      LEAK_CFLAGS: -DEXITFREE
+      TERM: xterm
+
+    strategy:
+      fail-fast: false
+      matrix:
+        features: [tiny, normal, huge]
+        runner: [macos-15]
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.source-repository != '' && '.' || 'mnv' }}
+
+    steps:
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+
+      - name: Install dependencies
+        run: brew install lua libtool
+
+      - name: Build
+        run: |
+          if [ "${{ matrix.features }}" = "tiny" ]; then
+            ./configure --with-features=tiny --disable-gui
+          elif [ "${{ matrix.features }}" = "normal" ]; then
+            ./configure --with-features=normal --disable-gui
+          else
+            ./configure --with-features=huge \
+              --enable-python3interp \
+              --enable-rubyinterp \
+              --enable-luainterp \
+              --enable-tclinterp
+          fi
+          make -j"$(sysctl -n hw.logicalcpu)"
+
+      - name: Test
+        timeout-minutes: 25
+        run: |
+          make "$TEST"

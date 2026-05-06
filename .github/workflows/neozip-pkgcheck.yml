@@ -1,0 +1,100 @@
+name: "neozip: Package Check"
+
+on:
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+
+jobs:
+  pkgcheck:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu GCC
+            os: ubuntu-latest
+            compiler: gcc
+            cxx-compiler: g++
+
+          - name: Ubuntu GCC AARCH64
+            os: ubuntu-24.04-arm
+            compiler: gcc
+            cxx-compiler: g++
+
+          - name: macOS Clang
+            os: macOS-latest
+            compiler: clang
+            cxx-compiler: clang++
+
+    steps:
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+          show-progress: 'false'
+
+      - name: Install packages (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            abigail-tools \
+            diffoscope \
+            ninja-build
+
+      - name: Install packages (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja diffoscope
+        env:
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+      - name: Compare builds
+        working-directory: neozip
+        run: sh test/pkgcheck.sh
+        env:
+          CC: ${{ matrix.compiler }}
+          CXX: ${{ matrix.cxx-compiler }}
+
+      - name: Compare builds (compat)
+        working-directory: neozip
+        run: sh test/pkgcheck.sh --zlib-compat
+        env:
+          CC: ${{ matrix.compiler }}
+
+      - name: Check ABI
+        if: runner.os != 'macOS'
+        working-directory: neozip
+        run: sh test/abicheck.sh --refresh-if
+        env:
+          CC: ${{ matrix.compiler }}
+          CXX: ${{ matrix.cxx-compiler }}
+
+      - name: Check ABI (compat)
+        if: runner.os != 'macOS'
+        working-directory: neozip
+        run: sh test/abicheck.sh --zlib-compat --refresh-if
+        env:
+          CC: ${{ matrix.compiler }}
+          CXX: ${{ matrix.cxx-compiler }}
+
+      - name: Upload build errors
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            neozip/**/*.abi
+            neozip/btmp1/configure.log
+            neozip/btmp2/configure.log
+          retention-days: 30

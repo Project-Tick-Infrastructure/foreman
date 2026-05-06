@@ -1,0 +1,68 @@
+name: "ForgeWrapper: Build"
+
+on:
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.source-repository != '' && '.' || 'forgewrapper' }}
+    steps:
+      - uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "8"
+          architecture: x64
+      - name: Build with Gradle
+        run: |
+          chmod +x ./gradlew
+          ./gradlew build -iS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ForgeWrapper
+          path: ${{ inputs.source-repository != '' && 'build/libs' || 'forgewrapper/build/libs' }}
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.source-repository != '' && '.' || 'forgewrapper' }}
+    steps:
+      - uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "8"
+          architecture: x64
+      - name: Build with Gradle
+        env:
+          IS_PUBLICATION: true
+        run: |
+          chmod +x ./gradlew
+          ./gradlew publish -iS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ForgeWrapper-Release
+          path: ${{ inputs.source-repository != '' && 'build/libs' || 'forgewrapper/build/libs' }}

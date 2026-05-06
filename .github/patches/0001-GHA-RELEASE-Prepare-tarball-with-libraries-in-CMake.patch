@@ -1,0 +1,155 @@
+diff --git a/ganalytics/CMakeLists.txt b/ganalytics/CMakeLists.txt
+index a5ab25bd93..a89e50dc92 100644
+--- a/ganalytics/CMakeLists.txt
++++ b/ganalytics/CMakeLists.txt
+@@ -7,7 +7,6 @@ include(CMakePackageConfigHelpers)
+ set(CMAKE_AUTOMOC ON)
+ 
+ find_package(Qt6 COMPONENTS Core Gui Network REQUIRED)
+-find_package(systeminfo REQUIRED)
+ 
+ set(ganalytics_SOURCES
+ src/ganalytics.cpp
+diff --git a/libnbtplusplus/CMakeLists.txt b/libnbtplusplus/CMakeLists.txt
+index 10beb52830..96d9e56b05 100644
+--- a/libnbtplusplus/CMakeLists.txt
++++ b/libnbtplusplus/CMakeLists.txt
+@@ -37,7 +37,6 @@ set(NBT_SOURCES_Z
+     src/io/ozlibstream.cpp)
+ 
+ if(NBT_USE_ZLIB)
+-    find_package(neozip REQUIRED)
+     list(APPEND NBT_SOURCES ${NBT_SOURCES_Z})
+     add_definitions("-DNBT_HAVE_ZLIB")
+ endif()
+diff --git a/meshmc/CMakeLists.txt b/meshmc/CMakeLists.txt
+index d31fdd8c68..c308956acf 100644
+--- a/meshmc/CMakeLists.txt
++++ b/meshmc/CMakeLists.txt
+@@ -155,26 +155,8 @@ QUERY_QMAKE(QT_INSTALL_PLUGINS QT_PLUGINS_DIR)
+ QUERY_QMAKE(QT_INSTALL_LIBS QT_LIBS_DIR)
+ QUERY_QMAKE(QT_INSTALL_LIBEXECS QT_LIBEXECS_DIR)
+ 
+-# Map missing multi-config configurations to available ones.
+-# Monorepo libraries are built with single-config (Ninja), but MeshMC uses
+-# Ninja Multi-Config which validates all configurations at configure time.
+-set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release Debug "")
+-set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release Debug "")
+-
+ find_package(LibArchive REQUIRED)
+-find_package(neozip REQUIRED)
+-find_package(cmark REQUIRED)
+ find_package(tomlplusplus REQUIRED)
+-find_package(nbt++ REQUIRED)
+-find_package(systeminfo REQUIRED)
+-find_package(ganalytics REQUIRED)
+-find_package(rainbow REQUIRED)
+-find_package(iconfix REQUIRED)
+-find_package(LocalPeer REQUIRED)
+-find_package(classparser REQUIRED)
+-find_package(optional-bare REQUIRED)
+-find_package(xz-embedded REQUIRED)
+-find_package(Katabasis REQUIRED)
+ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+ 
+ ####################################### Branding #######################################
+@@ -413,16 +413,16 @@ if(UNIX AND APPLE)
+ 
+ 
+ elseif(UNIX)
+-    set(BINARY_DEST_DIR "bin")
+-    set(LIBRARY_DEST_DIR "lib${LIB_SUFFIX}")
+-    set(JARS_DEST_DIR "share/${MeshMC_Name}")
+-
+-    # Set RPATH
+-    SET(MeshMC_BINARY_RPATH "$ORIGIN/../lib${LIB_SUFFIX}")
+-
+     # Standard FreeDesktop install paths (replaces KDEInstallDirs to avoid
+     # conflicts with GNUInstallDirs already loaded by find_package(Qt6)).
+     include(GNUInstallDirs)
++
++    set(BINARY_DEST_DIR "${CMAKE_INSTALL_BINDIR}")
++    set(LIBRARY_DEST_DIR "${CMAKE_INSTALL_LIBDIR}")
++    set(JARS_DEST_DIR "share/${MeshMC_Name}")
++
++    # Set RPATH using the actual library install dir resolved by GNUInstallDirs
++    SET(MeshMC_BINARY_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+     set(KDE_INSTALL_APPDIR      "${CMAKE_INSTALL_DATAROOTDIR}/applications")
+     set(KDE_INSTALL_METAINFODIR "${CMAKE_INSTALL_DATAROOTDIR}/metainfo")
+     set(KDE_INSTALL_ICONDIR     "${CMAKE_INSTALL_DATAROOTDIR}/icons")
+@@ -465,10 +447,20 @@ endif()
+ include(ExternalProject)
+ set_directory_properties(PROPERTIES EP_BASE External)
+ 
+-find_package(JavaCheck REQUIRED)
+-find_package(NewLaunch REQUIRED)
+-install(FILES "${JAVACHECK_JAR}" DESTINATION "${JARS_DEST_DIR}" RENAME "JavaCheck.jar")
+-install(FILES "${NEWLAUNCH_JAR}" DESTINATION "${JARS_DEST_DIR}" RENAME "NewLaunch.jar")
++add_subdirectory(libraries/neozip)
++add_subdirectory(libraries/libnbtplusplus)
++add_subdirectory(libraries/cmark)
++add_subdirectory(libraries/systeminfo)
++add_subdirectory(libraries/ganalytics)
++add_subdirectory(libraries/launcher)
++add_subdirectory(libraries/javacheck)
++add_subdirectory(libraries/xz-embedded)
++add_subdirectory(libraries/rainbow)
++add_subdirectory(libraries/iconfix)
++add_subdirectory(libraries/LocalPeer)
++add_subdirectory(libraries/classparser)
++add_subdirectory(libraries/optional-bare)
++add_subdirectory(libraries/katabasis)
+ 
+ ############################### Built Artifacts ###############################
+ 
+diff --git a/meshmc/launcher/CMakeLists.txt b/meshmc/launcher/CMakeLists.txt
+index a332d8faa5..02d7fa58a4 100644
+--- a/meshmc/launcher/CMakeLists.txt
++++ b/meshmc/launcher/CMakeLists.txt
+@@ -988,10 +988,10 @@ target_link_libraries(MeshMC_logic
+ )
+ target_link_libraries(MeshMC_logic
+     iconfix
+-    cmark::cmark
++    cmark
+     rainbow
+-    LocalPeer::LocalPeer
+-    ganalytics::ganalytics
++    LocalPeer
++    ganalytics
+ )
+ 
+ # Plugin system needs dlopen/dlsym on Unix
+diff --git a/javacheck/CMakeLists.txt b/javacheck/CMakeLists.txt
+index 3eb51bb775..5c20f54a77 100644
+--- a/javacheck/CMakeLists.txt
++++ b/javacheck/CMakeLists.txt
+@@ -16,9 +16,7 @@ set(SRC
+ 
+ add_jar(JavaCheck ${SRC})
+ 
+-install_jar(JavaCheck "${CMAKE_INSTALL_DATADIR}/JavaCheck")
+-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/JavaCheck.jar"
+-    DESTINATION "${CMAKE_INSTALL_DATADIR}/JavaCheck")
++install_jar(JavaCheck "${JARS_DEST_DIR}")
+ 
+ configure_package_config_file(
+     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/JavaCheckConfig.cmake.in"
+diff --git a/javalauncher/CMakeLists.txt b/javalauncher/CMakeLists.txt
+index c1ac249e83..33d62883ec 100644
+--- a/javalauncher/CMakeLists.txt
++++ b/javalauncher/CMakeLists.txt
+@@ -24,9 +24,7 @@ set(SRC
+ )
+ add_jar(NewLaunch ${SRC})
+ 
+-install_jar(NewLaunch "${CMAKE_INSTALL_DATADIR}/NewLaunch")
+-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/NewLaunch.jar"
+-    DESTINATION "${CMAKE_INSTALL_DATADIR}/NewLaunch")
++install_jar(NewLaunch "${JARS_DEST_DIR}")
+ 
+ configure_package_config_file(
+     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/NewLaunchConfig.cmake.in"
+-- 
+2.53.0
+

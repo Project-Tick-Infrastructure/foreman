@@ -1,0 +1,78 @@
+name: Foreman Send Callback
+description: Send a JSON callback payload to Foreman when callback credentials are available.
+
+inputs:
+  callback_url:
+    description: Foreman callback base URL.
+    required: false
+    default: ""
+  callback_token:
+    description: Foreman callback bearer token.
+    required: false
+    default: ""
+  pipeline_id:
+    description: Foreman pipeline ID for admin-authenticated callbacks.
+    required: false
+    default: ""
+  foreman_base_url:
+    description: Public Foreman base URL for admin-authenticated callbacks.
+    required: false
+    default: https://builds.projecttick.net
+  foreman_api_token:
+    description: Foreman admin API token for admin-authenticated callbacks.
+    required: false
+    default: ""
+  endpoint:
+    description: Callback endpoint suffix, for example log_url or status.
+    required: true
+  payload_json:
+    description: Raw JSON payload to send.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Send callback payload
+      shell: bash
+      env:
+        CALLBACK_URL: ${{ inputs.callback_url }}
+        CALLBACK_TOKEN: ${{ inputs.callback_token }}
+        PIPELINE_ID: ${{ inputs.pipeline_id }}
+        FOREMAN_BASE_URL: ${{ inputs.foreman_base_url }}
+        FOREMAN_API_TOKEN: ${{ inputs.foreman_api_token }}
+        ENDPOINT: ${{ inputs.endpoint }}
+        PAYLOAD_JSON: ${{ inputs.payload_json }}
+      run: |
+        set -euo pipefail
+
+        if [[ -n "$CALLBACK_URL" && -n "$CALLBACK_TOKEN" ]]; then
+          curl \
+            --silent \
+            --show-error \
+            --fail \
+            --retry 3 \
+            --retry-all-errors \
+            --request POST \
+            --header "Authorization: Bearer $CALLBACK_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "$PAYLOAD_JSON" \
+            "${CALLBACK_URL%/}/${ENDPOINT}"
+          exit 0
+        fi
+
+        if [[ -n "$PIPELINE_ID" && -n "$FOREMAN_API_TOKEN" ]]; then
+          curl \
+            --silent \
+            --show-error \
+            --fail \
+            --retry 3 \
+            --retry-all-errors \
+            --request POST \
+            --header "Authorization: Bearer $FOREMAN_API_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "$PAYLOAD_JSON" \
+            "${FOREMAN_BASE_URL%/}/api/pipelines/${PIPELINE_ID}/admin-callback/${ENDPOINT}"
+          exit 0
+        fi
+
+        echo "No callback destination configured; skipping ${ENDPOINT}."

@@ -1,0 +1,201 @@
+# Copyright (C) Project Tick
+# SPDX-License-Identifier: MIT
+name: Prepare Source Tree
+description: >
+  Prepare a source tree for archiving. Works in both monorepo and polyrepo layouts.
+
+  Monorepo: copies <project>/ into a staging area, optionally bundles
+  docs/handbook/<project> and library directories from the workspace.
+
+  Polyrepo: the workspace root IS the project. Bundles library dependencies
+  by cloning them from their GitLab repositories.
+
+inputs:
+  project:
+    description: >
+      Project directory name (e.g. meshmc, neozip).
+      In polyrepo mode (source-repository set), this is used only for naming
+      the output directory — the workspace root is used as the source.
+    required: false
+    default: ""
+  source-repository:
+    description: >
+      Source repository URL (GitLab). When set, polyrepo mode is active:
+      the workspace root is the project root, not a subdirectory.
+    required: false
+    default: ""
+  bundle-handbook:
+    description: >
+      Bundle docs/handbook/<project> into the source tree if it exists.
+      Only applies in monorepo mode.
+    required: false
+    default: "true"
+  bundle-libraries:
+    description: >
+      Newline-separated list of library bundles.
+
+      Monorepo format  — "src:dst"
+        Each line maps a workspace directory to a destination inside the tree.
+        Example: "libnbtplusplus:libraries/libnbtplusplus"
+
+      Polyrepo format  — "repo_url:dst" or "gitlab:<path>:dst"
+        Each line clones a repository into the destination path.
+        Example: "https://gitlab.com/project-tick/libnbtplusplus.git:libraries/libnbtplusplus"
+        Short form: "gitlab:project-tick/libnbtplusplus:libraries/libnbtplusplus"
+    required: false
+    default: ""
+  gitlab-base-url:
+    description: "GitLab base URL for short-form 'gitlab:<path>:dst' entries."
+    required: false
+    default: "https://gitlab.com"
+  docs-repository:
+    description: >
+      Optional documentation repository URL to clone. When set, the repo is
+      cloned and its contents are merged into docs/ inside the source tree.
+    required: false
+    default: ""
+  docs-ref:
+    description: "Ref to checkout for the docs repository."
+    required: false
+    default: "master"
+
+outputs:
+  source-dir:
+    description: "Path to the prepared source tree ready for archiving"
+    value: ${{ steps.prepare.outputs.source-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare source tree
+      id: prepare
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        SOURCE_REPOSITORY: ${{ inputs.source-repository }}
+        BUNDLE_HANDBOOK: ${{ inputs.bundle-handbook }}
+        BUNDLE_LIBRARIES: ${{ inputs.bundle-libraries }}
+        GITLAB_BASE_URL: ${{ inputs.gitlab-base-url }}
+        DOCS_REPOSITORY: ${{ inputs.docs-repository }}
+        DOCS_REF: ${{ inputs.docs-ref || 'master' }}
+        SOURCE_AUTH_TOKEN: ${{ secrets.PT_GITLAB_SOURCE_TOKEN || '' }}
+        SOURCE_AUTH_USERNAME: ${{ vars.PT_GITLAB_SOURCE_USERNAME || 'oauth2' }}
+      run: |
+        set -euo pipefail
+
+        # Staging dizinini workspace DIŞINDA oluştur — rsync loop'unu önler
+        SRC_STAGE="$RUNNER_TEMP/source-stage"
+        mkdir -p "$SRC_STAGE"
+
+        # ── Determine mode ────────────────────────────────────────────────
+        # Polyrepo: SOURCE_REPOSITORY is set → workspace root IS the project
+        # Monorepo: PROJECT dir exists in workspace → copy it
+        if [[ -n "$SOURCE_REPOSITORY" ]]; then
+          POLYREPO=true
+          # Derive project name from SOURCE_REPOSITORY if not given
+          if [[ -z "$PROJECT" ]]; then
+            PROJECT="$(basename "$SOURCE_REPOSITORY" .git)"
+          fi
+          echo "::notice::Polyrepo mode — project: $PROJECT, root: $GITHUB_WORKSPACE"
+          # Copy workspace root into staging (exclude .git)
+          # SRC_STAGE is outside GITHUB_WORKSPACE — no rsync loop risk
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.git/' \
+            "$GITHUB_WORKSPACE/" "$SRC_STAGE/$PROJECT/"
+        else
+          POLYREPO=false
+          echo "::notice::Monorepo mode — project: $PROJECT"
+          if [[ -z "$PROJECT" ]]; then
+            echo "::error::project input is required in monorepo mode"
+            exit 1
+          fi
+          cp -a "$PROJECT" "$SRC_STAGE/$PROJECT"
+        fi
+
+        # ── Bundle handbook (monorepo only) ───────────────────────────────
+        if [[ "$POLYREPO" == "false" && "$BUNDLE_HANDBOOK" == "true" ]]; then
+          if [[ -d "docs/handbook/$PROJECT" ]]; then
+            mkdir -p "$SRC_STAGE/$PROJECT/docs/handbook"
+            cp -a "docs/handbook/$PROJECT/." "$SRC_STAGE/$PROJECT/docs/handbook/"
+            echo "Bundled handbook for $PROJECT"
+          fi
+        fi
+
+        # ── Clone docs repository (polyrepo) ─────────────────────────────
+        if [[ -n "$DOCS_REPOSITORY" ]]; then
+          DOCS_URL="$DOCS_REPOSITORY"
+          if [[ -n "$SOURCE_AUTH_TOKEN" ]] && [[ "$DOCS_URL" == https://* ]]; then
+            DOCS_URL="https://${SOURCE_AUTH_USERNAME}:${SOURCE_AUTH_TOKEN}@${DOCS_URL#https://}"
+          fi
+          echo "::group::Cloning docs repository"
+          git clone --depth 1 --branch "$DOCS_REF" "$DOCS_URL" "$RUNNER_TEMP/docs-repo"
+          mkdir -p "$SRC_STAGE/$PROJECT/docs"
+          rsync -a --exclude='.git' "$RUNNER_TEMP/docs-repo/" "$SRC_STAGE/$PROJECT/docs/"
+          echo "::endgroup::"
+        fi
+
+        # ── Bundle libraries ──────────────────────────────────────────────
+        if [[ -n "$BUNDLE_LIBRARIES" ]]; then
+          while IFS= read -r entry; do
+            entry="$(echo "$entry" | xargs)"
+            [[ -n "$entry" ]] || continue
+
+            # Count colons to determine format
+            colon_count=$(echo "$entry" | tr -cd ':' | wc -c)
+
+            if [[ "$POLYREPO" == "true" ]] || [[ "$entry" == https://* ]] || [[ "$entry" == git@* ]] || [[ "$entry" == gitlab:* ]]; then
+              # ── Polyrepo: clone from URL ──────────────────────────────
+              if [[ "$entry" == gitlab:* ]]; then
+                # Short form: gitlab:<path>:dst
+                rest="${entry#gitlab:}"
+                lib_path="${rest%%:*}"
+                lib_dst="${rest#*:}"
+                lib_url="${GITLAB_BASE_URL%/}/${lib_path}.git"
+              elif [[ $colon_count -ge 2 ]] && [[ "$entry" != https://* ]] && [[ "$entry" != git@* ]]; then
+                # src:dst where src is a local path (monorepo fallback in polyrepo)
+                lib_src="${entry%%:*}"
+                lib_dst="${entry#*:}"
+                if [[ -d "$lib_src" ]]; then
+                  echo "Bundling local library: $lib_src -> $lib_dst"
+                  mkdir -p "$SRC_STAGE/$PROJECT/$lib_dst"
+                  cp -a "$lib_src/." "$SRC_STAGE/$PROJECT/$lib_dst/"
+                  continue
+                fi
+                # Treat as gitlab short path
+                lib_url="${GITLAB_BASE_URL%/}/${lib_src}.git"
+              else
+                # Full URL: https://...git:dst
+                lib_url="${entry%:*}"
+                lib_dst="${entry##*:}"
+              fi
+
+              if [[ -n "$SOURCE_AUTH_TOKEN" ]] && [[ "$lib_url" == https://* ]]; then
+                auth_url="https://${SOURCE_AUTH_USERNAME}:${SOURCE_AUTH_TOKEN}@${lib_url#https://}"
+              else
+                auth_url="$lib_url"
+              fi
+
+              lib_name="$(basename "$lib_url" .git)"
+              echo "::group::Cloning $lib_name → $lib_dst"
+              git clone --depth 1 "$auth_url" "$RUNNER_TEMP/lib-${lib_name}"
+              mkdir -p "$SRC_STAGE/$PROJECT/$lib_dst"
+              rsync -a --exclude='.git' "$RUNNER_TEMP/lib-${lib_name}/" "$SRC_STAGE/$PROJECT/$lib_dst/"
+              echo "::endgroup::"
+            else
+              # ── Monorepo: copy from workspace ─────────────────────────
+              lib_src="${entry%%:*}"
+              lib_dst="${entry#*:}"
+              if [[ -z "$lib_src" ]] || [[ -z "$lib_dst" ]]; then
+                echo "::error::Invalid bundle-libraries entry: '$entry' (expected 'src:dst')"
+                exit 1
+              fi
+              echo "Bundling library: $lib_src -> $lib_dst"
+              mkdir -p "$SRC_STAGE/$PROJECT/$lib_dst"
+              cp -a "$lib_src/." "$SRC_STAGE/$PROJECT/$lib_dst/"
+            fi
+          done <<< "$BUNDLE_LIBRARIES"
+        fi
+
+        echo "source-dir=$SRC_STAGE/$PROJECT" >> "$GITHUB_OUTPUT"
+        echo "::notice::Source tree prepared at $SRC_STAGE/$PROJECT"

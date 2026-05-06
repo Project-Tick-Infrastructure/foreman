@@ -1,0 +1,67 @@
+name: "neozip: Libpng"
+
+on:
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+
+jobs:
+  libpng:
+    name: Ubuntu Clang
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+          show-progress: 'false'
+
+      - name: Generate project files (neozip)
+        run: |
+          cmake -S neozip -B build-neozip \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DZLIB_COMPAT=ON \
+            -DZLIB_ENABLE_TESTS=OFF
+        env:
+          CC: clang
+          CFLAGS: -fPIC
+          CI: true
+
+      - name: Compile source code (neozip)
+        run: cmake --build build-neozip -j5 --config Release
+
+      - name: Checkout repository (libpng)
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: glennrp/libpng
+          path: libpng
+          show-progress: 'false'
+
+      - name: Generate project files (libpng)
+        run: |
+          cmake -S libpng -B build-libpng \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPNG_TESTS=ON \
+            -DPNG_STATIC=OFF \
+            -DZLIB_INCLUDE_DIR=${{ github.workspace }}/neozip \
+            -DZLIB_LIBRARY=${{ github.workspace }}/build-neozip/libz.a
+        env:
+          CC: clang
+          CI: true
+
+      - name: Compile source code (libpng)
+        run: cmake --build build-libpng -j5 --config Release
+
+      - name: Run test cases (libpng)
+        run: ctest -j5 -C Release --output-on-failure --max-width 120
+        working-directory: build-libpng

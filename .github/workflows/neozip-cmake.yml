@@ -1,0 +1,128 @@
+name: "neozip: CMake"
+
+on:
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+
+env:
+  TERM: xterm-256color
+  GTEST_COLOR: 1
+
+jobs:
+  cmake:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu GCC ASAN
+            os: ubuntu-latest
+            compiler: gcc
+            cxx-compiler: g++
+            cflags: ""
+            cxxflags: -Wno-maybe-uninitialized
+            ldflags: ""
+            cmake-args: -DWITH_SANITIZER=Address -DWITH_BENCHMARKS=ON
+
+          - name: Ubuntu GCC Native Instructions
+            os: ubuntu-latest
+            compiler: gcc
+            cxx-compiler: g++
+            cmake-args: -DWITH_NATIVE_INSTRUCTIONS=ON
+
+          - name: Ubuntu Clang
+            os: ubuntu-latest
+            compiler: clang
+            cxx-compiler: clang++
+            packages: llvm-15 llvm-15-tools
+
+          - name: Ubuntu Clang No Optim
+            os: ubuntu-latest
+            compiler: clang
+            cxx-compiler: clang++
+            cmake-args: -DWITH_OPTIM=OFF
+
+          - name: Ubuntu Clang Compat
+            os: ubuntu-latest
+            compiler: clang
+            cxx-compiler: clang++
+            cmake-args: -DZLIB_COMPAT=ON
+
+          - name: macOS Clang
+            os: macos-latest
+            compiler: clang
+            cxx-compiler: clang++
+
+          - name: macOS Clang Compat
+            os: macos-latest
+            compiler: clang
+            cxx-compiler: clang++
+            cmake-args: -DZLIB_COMPAT=ON
+
+          - name: Windows MSVC Win64
+            os: windows-latest
+            compiler: cl
+            cmake-args: -A x64
+
+          - name: Windows MSVC Win64 Compat
+            os: windows-latest
+            compiler: cl
+            cmake-args: -A x64 -DZLIB_COMPAT=ON
+
+    steps:
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+          show-progress: 'false'
+
+      - name: Install packages (Ubuntu)
+        if: runner.os == 'Linux' && matrix.packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.packages }}
+
+      - name: Generate project files
+        shell: bash
+        run: |
+          cmake -S neozip -B build \
+            ${{ matrix.cmake-args }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWITH_MAINTAINER_WARNINGS=ON
+        env:
+          CC: ${{ matrix.compiler }}
+          CXX: ${{ matrix.cxx-compiler }}
+          CFLAGS: ${{ matrix.cflags }}
+          CXXFLAGS: ${{ matrix.cxxflags }}
+          LDFLAGS: ${{ matrix.ldflags }}
+          CI: true
+
+      - name: Compile source code
+        run: cmake --build build -j5 --config Release
+
+      - name: Run test cases
+        run: ctest --verbose -C Release --output-on-failure --max-width 120 -j 5
+        working-directory: build
+
+      - name: Upload build errors
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ${{ matrix.name }} (cmake)
+          path: |
+            **/CMakeFiles/CMakeOutput.log
+            **/CMakeFiles/CMakeError.log
+            **/Testing/Temporary/*
+          retention-days: 30

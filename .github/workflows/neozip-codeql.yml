@@ -1,0 +1,62 @@
+name: "neozip: CodeQL"
+
+on:
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+
+jobs:
+  analyze:
+    name: CodeQL (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+          show-progress: 'false'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: cpp
+          queries: +security-and-quality
+
+      - name: Build default config
+        shell: bash
+        run: |
+          cmake -B build-default -S neozip ${{ runner.os == 'Windows' && '-A x64' || '' }}
+          cmake --build build-default -j4
+
+      - name: Build compat config
+        shell: bash
+        run: |
+          cmake -B build-compat -S neozip -DZLIB_COMPAT=ON -DWITH_NEW_STRATEGIES=OFF -DWITH_OPTIM=OFF -DWITH_REDUCED_MEM=ON ${{ runner.os == 'Windows' && '-A x64' || '' }}
+          cmake --build build-compat -j4
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/oss:${{ matrix.os }}"

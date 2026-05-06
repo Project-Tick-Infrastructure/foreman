@@ -1,0 +1,49 @@
+name: "neozip: Fuzz"
+
+on:
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  fuzzing:
+    name: Fuzzing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+          show-progress: 'false'
+      - name: Build Fuzzers
+        id: build
+        uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+        with:
+          dry-run: false
+          language: c++
+
+      - name: Run Fuzzers
+        uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+        with:
+          fuzz-seconds: 600
+          dry-run: false
+          language: c++
+
+      - name: Upload Crash
+        uses: actions/upload-artifact@v7
+        if: failure() && steps.build.outcome == 'success'
+        with:
+          name: neozip-fuzz-artifacts
+          path: ./out/artifacts

@@ -1,0 +1,34 @@
+name: "MeshMC: Release"
+
+on:
+  workflow_call:
+    inputs:
+      source-ref:
+        description: Source ref to build when invoked from another workflow.
+        required: false
+        type: string
+        default: ""
+      source-repository:
+        description: Source repository URL (GitLab). Foreman sends this for polyrepo builds.
+        required: false
+        type: string
+        default: ""
+
+permissions: {}
+
+jobs:
+  build_release:
+    name: Build Release
+    uses: ./.github/workflows/meshmc-build.yml
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    with:
+      build-type: Release
+      environment: Release
+      source-ref: ${{ inputs.source-ref }}
+      source-repository: ${{ inputs.source-repository || '' }}
+    secrets: inherit
+
+

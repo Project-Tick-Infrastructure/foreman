@@ -1,0 +1,19 @@
+name: "mnv: Check Links"
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  lychee:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+          show-progress: 'false'
+      - name: Run Lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --verbose --config mnv/ci/lychee.toml mnv/

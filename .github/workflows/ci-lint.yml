@@ -1,0 +1,80 @@
+# Copyright (C) Project Tick
+# SPDX-License-Identifier: MIT
+#
+# Fast lint & commit checks — called from ci.yml before builds start.
+
+name: "Lint & Checks"
+
+on:
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+      run-level:
+        description: "minimal | standard | full"
+        required: true
+        type: string
+      changed-projects:
+        description: "Comma-separated list of changed projects"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  reuse:
+    name: "REUSE Compliance"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+          show-progress: 'false'
+
+      - name: Check REUSE compliance
+        uses: fsfe/reuse-action@v6
+  whitespace:
+    name: "Whitespace"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+          show-progress: 'false'
+
+      - name: Check trailing whitespace
+        run: |
+          set -euo pipefail
+          ERRORS=$(git diff --check HEAD~1 HEAD -- \
+            ':!*.patch' \
+            ':!*/test/data/*' \
+            ':!*.ico' \
+            ':!*.png' \
+            ':!*.jpg' \
+            ':!*.gif' \
+            ':!*.bin' \
+            ':!*.7z' \
+            ':!*.zip' \
+            ':!*.gz' \
+            ':!*.lock' \
+            2>/dev/null || true)
+          if [[ -n "$ERRORS" ]]; then
+            echo "::warning::Whitespace issues found:"
+            echo "$ERRORS"
+          fi

@@ -1,0 +1,97 @@
+# Copyright (C) Project Tick
+# SPDX-License-Identifier: MIT
+name: Package Source Tarball
+description: >
+  Create source archives in multiple formats (.tar.xz, .tar.gz),
+  and optionally GPG-sign each artifact.
+
+inputs:
+  project:
+    description: "Project directory name (e.g. meshmc, neozip)"
+    required: true
+  version:
+    description: "Release version string (e.g. 1.0.0)"
+    required: true
+  source-dir:
+    description: "Path to the prepared source tree to archive"
+    required: true
+  output-dir:
+    description: "Directory to write archives, checksums, and signatures"
+    required: false
+    default: "release-artifacts"
+  gpg-private-key:
+    description: "ASCII-armored GPG private key for signing"
+    required: false
+  gpg-private-key-id:
+    description: "GPG key ID to select the signing key"
+    required: false
+
+outputs:
+  artifact-dir:
+    description: "Path to the directory containing all release artifacts"
+    value: ${{ inputs.output-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install packaging tools
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq xz-utils
+
+    - name: Create archives
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        VERSION: ${{ inputs.version }}
+        SRC_DIR: ${{ inputs.source-dir }}
+        OUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$OUT_DIR"
+
+        BASE="${PROJECT}-${VERSION}"
+
+        # Create a clean directory named project-version for the archive root
+        STAGING="$(mktemp -d)"
+        cp -a "$SRC_DIR" "$STAGING/$BASE"
+
+        # Remove .git directories from the staged copy
+        find "$STAGING/$BASE" -name '.git' -type d -exec rm -rf {} + 2>/dev/null || true
+        find "$STAGING/$BASE" -name '.gitmodules' -delete 2>/dev/null || true
+
+        tar -cf "$OUT_DIR/${BASE}.tar" -C "$STAGING" "$BASE"
+        gzip -9 -k "$OUT_DIR/${BASE}.tar"
+        xz -9 -k "$OUT_DIR/${BASE}.tar"
+
+        rm -rf "$STAGING"
+        rm -rf "$OUT_DIR/${BASE}.tar"
+
+        echo "### 📦 Archives created for ${BASE}" >> "$GITHUB_STEP_SUMMARY"
+        ls -lh "$OUT_DIR"/ >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Import GPG key
+      if: inputs.gpg-private-key != '' && inputs.gpg-private-key-id != ''
+      shell: bash
+      env:
+        GPG_PRIVATE_KEY: ${{ inputs.gpg-private-key }}
+      run: |
+        echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+    - name: Sign archives with GPG
+      if: inputs.gpg-private-key != '' && inputs.gpg-private-key-id != ''
+      shell: bash
+      env:
+        OUT_DIR: ${{ inputs.output-dir }}
+        GPG_KEY_ID: ${{ inputs.gpg-private-key-id }}
+      run: |
+        set -euo pipefail
+        cd "$OUT_DIR"
+        for f in *.tar *.tar.gz *.tar.xz *.tar.zst *.zip *.7z; do
+          [ -f "$f" ] || continue
+          gpg --batch --yes --detach-sign --armor \
+            --local-user "$GPG_KEY_ID" \
+            "$f"
+        done
+        echo "### 🔏 GPG signatures created" >> "$GITHUB_STEP_SUMMARY"
