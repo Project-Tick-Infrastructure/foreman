@@ -58,6 +58,14 @@ inputs:
     description: "Ref to checkout for the docs repository."
     required: false
     default: "master"
+  gitlab-source-token:
+    description: "GitLab source token for authenticated cloning (e.g. PT_GITLAB_SOURCE_TOKEN)."
+    required: false
+    default: ""
+  gitlab-source-username:
+    description: "GitLab source username for authenticated cloning (e.g. PT_GITLAB_SOURCE_USERNAME)."
+    required: false
+    default: "oauth2"
 
 outputs:
   source-dir:
@@ -78,8 +86,8 @@ runs:
         GITLAB_BASE_URL: ${{ inputs.gitlab-base-url }}
         DOCS_REPOSITORY: ${{ inputs.docs-repository }}
         DOCS_REF: ${{ inputs.docs-ref || 'master' }}
-        SOURCE_AUTH_TOKEN: ${{ secrets.PT_GITLAB_SOURCE_TOKEN || '' }}
-        SOURCE_AUTH_USERNAME: ${{ vars.PT_GITLAB_SOURCE_USERNAME || 'oauth2' }}
+        SOURCE_AUTH_TOKEN: ${{ inputs.gitlab-source-token }}
+        SOURCE_AUTH_USERNAME: ${{ inputs.gitlab-source-username || 'oauth2' }}
       run: |
         set -euo pipefail
 

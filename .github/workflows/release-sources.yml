@@ -184,6 +184,8 @@ jobs:
             gitlab:project-tick/projects/rainbow:libraries/rainbow
             gitlab:project-tick/projects/systeminfo:libraries/systeminfo
             gitlab:project-tick/projects/xz-embedded:libraries/xz-embedded
+          gitlab-source-token: ${{ secrets.PT_GITLAB_SOURCE_TOKEN }}
+          gitlab-source-username: ${{ vars.PT_GITLAB_SOURCE_USERNAME }}
 
       - name: Package source archives
         uses: Project-Tick/Project-Tick/.github/actions/package-source@master
@@ -274,6 +276,8 @@ jobs:
         with:
           project: neozip
           source-repository: ${{ inputs.source-repository || '' }}
+          gitlab-source-token: ${{ secrets.PT_GITLAB_SOURCE_TOKEN }}
+          gitlab-source-username: ${{ vars.PT_GITLAB_SOURCE_USERNAME }}
 
       - name: Package source archives
         uses: Project-Tick/Project-Tick/.github/actions/package-source@master
@@ -356,6 +360,8 @@ jobs:
         with:
           project: ${{ needs.resolve.outputs.project }}
           source-repository: ${{ inputs.source-repository || '' }}
+          gitlab-source-token: ${{ secrets.PT_GITLAB_SOURCE_TOKEN }}
+          gitlab-source-username: ${{ vars.PT_GITLAB_SOURCE_USERNAME }}
 
       - name: Package source archives
         uses: Project-Tick/Project-Tick/.github/actions/package-source@master

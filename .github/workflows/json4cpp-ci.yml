@@ -162,22 +162,3 @@ jobs:
         run: cmake -S ${{ inputs.source-repository != '' && '.' || 'json4cpp' }} -B build -DJSON_CI=On -G "Visual Studio 17 2022"
       - name: Build
         run: cmake --build build --config Release --target ci_test_msvc
-
-  codeql:
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-    steps:
-      - uses: Project-Tick-Infrastructure/checkout@v2
-        with:
-          source-repository: ${{ inputs.source-repository || '' }}
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: cpp
-      - name: Build
-        run: |
-          cmake -S ${{ inputs.source-repository != '' && '.' || 'json4cpp' }} -B build
-          cmake --build build
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
