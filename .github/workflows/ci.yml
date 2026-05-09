@@ -431,7 +431,7 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN || '' }}
           job_name: Gate
           job_id: ${{ github.job }}
-          status: ${{ job.status == 'success' && 'success' || (cancelled() && 'cancelled' || 'failure') }}
+          status: ${{ job.status }}
           conclusion: ${{ job.status }}
           runner_os: ${{ runner.os }}
 
@@ -1183,7 +1183,7 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN || '' }}
           job_name: CI Verdict
           job_id: ${{ github.job }}
-          status: ${{ job.status == 'success' && 'success' || (cancelled() && 'cancelled' || 'failure') }}
+          status: ${{ job.status }}
           conclusion: ${{ job.status }}
           runner_os: ${{ runner.os }}
 
