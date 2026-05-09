@@ -13,6 +13,10 @@ on:
         required: false
         type: string
         default: ""
+      foreman-pipeline-id:
+        description: Foreman pipeline ID for log streaming.
+        type: string
+        default: ""
 
 permissions: {}
 

@@ -4,10 +4,22 @@ on:
   workflow_dispatch:
   workflow_call:
 
+      inputs:
+      foreman-pipeline-id:
+        description: Foreman pipeline ID for log streaming.
+        type: string
+        default: ""
 jobs:
   lychee:
     runs-on: ubuntu-latest
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Checkout repository
         uses: Project-Tick-Infrastructure/checkout@v2
         with:

@@ -7,6 +7,10 @@ on:
         description: Source repository URL (GitLab).
         type: string
         default: ""
+      foreman-pipeline-id:
+        description: Foreman pipeline ID for log streaming.
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       source-repository:
@@ -19,6 +23,13 @@ jobs:
     name: Link zlib
     runs-on: ubuntu-latest
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Checkout repository
         uses: Project-Tick-Infrastructure/checkout@v2
         with:
@@ -58,6 +69,13 @@ jobs:
     name: Link neozip compat
     runs-on: ubuntu-latest
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Checkout repository
         uses: Project-Tick/Project-Tick/.github/actions/source-checkout@master
         with:

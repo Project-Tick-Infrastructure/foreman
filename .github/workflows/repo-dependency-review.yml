@@ -5,6 +5,11 @@ name: "Dependency Review"
 on:
   workflow_dispatch:
   workflow_call:
+      inputs:
+      foreman-pipeline-id:
+        description: Foreman pipeline ID for log streaming.
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -13,6 +18,13 @@ jobs:
   dependency-review:
     runs-on: ubuntu-latest
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Harden Runner
         uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
         with:

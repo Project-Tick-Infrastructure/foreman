@@ -8,6 +8,10 @@ on:
         type: boolean
         description: Whether to cache the repository created by Flatpak builds
         default: false
+      foreman-pipeline-id:
+        description: Foreman pipeline ID for log streaming.
+        type: string
+        default: ""
     outputs:
       repository-cache-key:
         description: Cache key used to save the contents of the repository
@@ -68,6 +72,13 @@ jobs:
       REPOSITORY_PATH: flatpak/repo
 
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Free up disk space
         working-directory: ${{ github.workspace }}
         shell: bash

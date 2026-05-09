@@ -74,6 +74,10 @@ on:
         required: false
         type: string
         default: ""
+      foreman-pipeline-id:
+        description: Foreman pipeline ID for log streaming.
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -88,6 +92,13 @@ jobs:
       project: ${{ steps.detect.outputs.project }}
       version: ${{ steps.detect.outputs.version }}
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Detect project from source-repository
         id: detect
         shell: bash
@@ -142,6 +153,13 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Checkout
         uses: Project-Tick-Infrastructure/checkout@v2
         with:
@@ -216,6 +234,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Checkout
         uses: Project-Tick-Infrastructure/checkout@v2
         with:
@@ -257,6 +282,13 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Checkout
         uses: Project-Tick-Infrastructure/checkout@v2
         with:
@@ -308,6 +340,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Checkout
         uses: Project-Tick-Infrastructure/checkout@v2
         with:
@@ -341,6 +380,13 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Checkout
         uses: Project-Tick-Infrastructure/checkout@v2
         with:
@@ -393,6 +439,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Checkout
         uses: Project-Tick-Infrastructure/checkout@v2
         with:
@@ -448,6 +501,13 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Checkout
         uses: Project-Tick-Infrastructure/checkout@v2
         with:

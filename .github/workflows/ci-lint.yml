@@ -21,6 +21,10 @@ on:
         required: false
         type: string
         default: ""
+      foreman-pipeline-id:
+        description: Foreman pipeline ID for log streaming.
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -47,6 +51,13 @@ jobs:
     name: "Whitespace"
     runs-on: ubuntu-latest
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       - name: Harden runner
         uses: step-security/harden-runner@v2
         with:

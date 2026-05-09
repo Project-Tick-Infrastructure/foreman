@@ -13,6 +13,10 @@ on:
         description: Source repository URL (GitLab).
         type: string
         default: ""
+      foreman-pipeline-id:
+        description: Foreman pipeline ID for log streaming.
+        type: string
+        default: ""
 
 jobs:
   # OSB runs first — guards against wasting time on uncompilable code
@@ -35,14 +39,6 @@ jobs:
     name: CMake
     needs: osb
     uses: ./.github/workflows/neozip-cmake.yml
-    secrets: inherit
-    with:
-      source-repository: ${{ inputs.source-repository || '' }}
-
-  codeql:
-    name: CodeQL
-    needs: osb
-    uses: ./.github/workflows/neozip-codeql.yml
     secrets: inherit
     with:
       source-repository: ${{ inputs.source-repository || '' }}

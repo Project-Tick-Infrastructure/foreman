@@ -18,6 +18,10 @@ on:
         description: Source repository URL (GitLab). Foreman sends this for polyrepo builds.
         type: string
         default: ""
+      foreman-pipeline-id:
+        description: Foreman pipeline ID for log streaming.
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       build-type:
@@ -108,6 +112,13 @@ jobs:
       MESHMC_DIR: ${{ inputs.source-repository != '' && '.' || 'meshmc' }}
 
     steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
       ##
       # SETUP
       ##

@@ -1,9 +1,8 @@
 name: Log Collector
 description: >
-  Composite action that intercepts stdout/stderr from all subsequent steps,
-  masks secrets, and streams log chunks to Foreman in real-time.
-  Uses pre/main/post lifecycle: pre installs the interceptor, main activates it,
-  post flushes remaining logs and cleans up.
+  Installs a background log streamer that captures stdout/stderr from all
+  subsequent steps and streams them to Foreman in real-time. Call once at
+  the beginning of each job. Cleanup happens automatically via a trap.
 
 inputs:
   callback_url:
@@ -33,207 +32,166 @@ inputs:
     description: Seconds between log flushes to Foreman.
     required: false
     default: "5"
-  mask_values:
-    description: >
-      Newline-separated list of secret values to mask in logs.
-      These are combined with any ::add-mask:: values found in the output.
-    required: false
-    default: ""
 
 runs:
   using: composite
   steps:
-    # ── PRE: Install the log interceptor ──────────────────────────
-    - name: Install log interceptor
+    - name: Start log streamer
       shell: bash
       env:
         FOREMAN_LOG_DIR: ${{ runner.temp }}/_foreman_logs
-        JOB_NAME: ${{ inputs.job_name }}
-      run: |
-        set -euo pipefail
-
-        mkdir -p "$FOREMAN_LOG_DIR"
-
-        # Create the interceptor script
-        cat > "$FOREMAN_LOG_DIR/interceptor.sh" << 'INTERCEPTOR'
-        #!/usr/bin/env bash
-        # Log interceptor: wraps step execution, captures output to per-step files.
-        # Activated by sourcing this script at the start of each step.
-
-        _FOREMAN_LOG_DIR="${FOREMAN_LOG_DIR:-/tmp/_foreman_logs}"
-        _FOREMAN_STEP_COUNTER="${_FOREMAN_LOG_DIR}/.step_counter"
-        _FOREMAN_MASK_FILE="${_FOREMAN_LOG_DIR}/.mask_values"
-
-        # Increment step counter
-        if [[ -f "$_FOREMAN_STEP_COUNTER" ]]; then
-          _step_num=$(( $(cat "$_FOREMAN_STEP_COUNTER") + 1 ))
-        else
-          _step_num=0
-        fi
-        echo "$_step_num" > "$_FOREMAN_STEP_COUNTER"
-
-        _step_name="${GITHUB_ACTION:-step-${_step_num}}"
-        _log_file="${_FOREMAN_LOG_DIR}/step_${_step_num}_${_step_name}.log"
-
-        # Tee stdout and stderr to the log file while preserving terminal output
-        exec > >(tee -a "$_log_file") 2> >(tee -a "$_log_file" >&2)
-        INTERCEPTOR
-        chmod +x "$FOREMAN_LOG_DIR/interceptor.sh"
-
-        # Create the flush script
-        cat > "$FOREMAN_LOG_DIR/flush.sh" << 'FLUSHER'
-        #!/usr/bin/env bash
-        # Flush collected logs to Foreman
-        set -euo pipefail
-
-        LOG_DIR="${FOREMAN_LOG_DIR:-/tmp/_foreman_logs}"
-        CALLBACK_URL="${FOREMAN_CALLBACK_URL:-}"
-        CALLBACK_TOKEN="${FOREMAN_CALLBACK_TOKEN:-}"
-        PIPELINE_ID="${FOREMAN_PIPELINE_ID:-}"
-        BASE_URL="${FOREMAN_BASE_URL:-https://builds.projecttick.net}"
-        API_TOKEN="${FOREMAN_API_TOKEN:-}"
-        JOB_NAME="${FOREMAN_JOB_NAME:-}"
-        MASK_FILE="${LOG_DIR}/.mask_values"
-
-        # Build mask_values JSON array
-        mask_json="[]"
-        if [[ -f "$MASK_FILE" && -s "$MASK_FILE" ]]; then
-          mask_json="$(jq -R -s 'split("\n") | map(select(length > 0))' < "$MASK_FILE")"
-        fi
-
-        send_chunk() {
-          local step_name="$1"
-          local step_number="$2"
-          local content="$3"
-          local sequence="$4"
-
-          local payload
-          payload="$(jq -nc \
-            --arg job_name "$JOB_NAME" \
-            --arg step_name "$step_name" \
-            --argjson step_number "$step_number" \
-            --arg content "$content" \
-            --argjson sequence "$sequence" \
-            --argjson mask_values "$mask_json" \
-            '{
-              job_name: $job_name,
-              step_name: $step_name,
-              step_number: $step_number,
-              content: $content,
-              sequence: $sequence,
-              mask_values: $mask_values
-            }')"
-
-          if [[ -n "$CALLBACK_URL" && -n "$CALLBACK_TOKEN" ]]; then
-            curl --silent --show-error --fail \
-              --retry 2 --retry-all-errors \
-              --max-time 10 \
-              --request POST \
-              --header "Authorization: Bearer $CALLBACK_TOKEN" \
-              --header "Content-Type: application/json" \
-              --data "$payload" \
-              "${CALLBACK_URL%/}/job_logs" 2>/dev/null || true
-          elif [[ -n "$PIPELINE_ID" && -n "$API_TOKEN" ]]; then
-            curl --silent --show-error --fail \
-              --retry 2 --retry-all-errors \
-              --max-time 10 \
-              --request POST \
-              --header "Authorization: Bearer $API_TOKEN" \
-              --header "Content-Type: application/json" \
-              --data "$payload" \
-              "${BASE_URL%/}/api/pipelines/${PIPELINE_ID}/admin-callback/job_logs" 2>/dev/null || true
-          fi
-        }
-
-        # Process each log file
-        seq=0
-        for log_file in "$LOG_DIR"/step_*.log; do
-          [[ -f "$log_file" ]] || continue
-
-          basename="$(basename "$log_file" .log)"
-          # Extract step number and name from filename: step_0_name.log
-          step_number="$(echo "$basename" | sed -n 's/^step_\([0-9]*\)_.*/\1/p')"
-          step_name="$(echo "$basename" | sed -n 's/^step_[0-9]*_//p')"
-          step_number="${step_number:-0}"
-          step_name="${step_name:-unknown}"
-
-          content="$(cat "$log_file")"
-          if [[ -z "$content" ]]; then
-            continue
-          fi
-
-          # Split into 48KB chunks if needed
-          chunk_size=49152
-          content_len=${#content}
-          offset=0
-          while [[ $offset -lt $content_len ]]; do
-            chunk="${content:$offset:$chunk_size}"
-            send_chunk "$step_name" "$step_number" "$chunk" "$seq"
-            seq=$((seq + 1))
-            offset=$((offset + chunk_size))
-          done
-        done
-        FLUSHER
-        chmod +x "$FOREMAN_LOG_DIR/flush.sh"
-
-        # Initialize step counter
-        echo "-1" > "$FOREMAN_LOG_DIR/.step_counter"
-
-        echo "FOREMAN_LOG_DIR=$FOREMAN_LOG_DIR" >> "$GITHUB_ENV"
-        echo "Log collector installed at $FOREMAN_LOG_DIR"
-
-    # ── MAIN: Activate the interceptor and write mask values ──────
-    - name: Activate log collector
-      shell: bash
-      env:
-        FOREMAN_LOG_DIR: ${{ runner.temp }}/_foreman_logs
-        MASK_VALUES: ${{ inputs.mask_values }}
         CALLBACK_URL: ${{ inputs.callback_url }}
         CALLBACK_TOKEN: ${{ inputs.callback_token }}
         PIPELINE_ID: ${{ inputs.pipeline_id }}
         FOREMAN_BASE_URL: ${{ inputs.foreman_base_url }}
         FOREMAN_API_TOKEN: ${{ inputs.foreman_api_token }}
         JOB_NAME: ${{ inputs.job_name }}
+        FLUSH_INTERVAL: ${{ inputs.flush_interval }}
       run: |
         set -euo pipefail
 
-        # Write mask values
-        mask_file="$FOREMAN_LOG_DIR/.mask_values"
-        if [[ -n "$MASK_VALUES" ]]; then
-          echo "$MASK_VALUES" >> "$mask_file"
+        # Skip if no callback destination
+        if [[ -z "$CALLBACK_URL$PIPELINE_ID" ]]; then
+          echo "No Foreman callback destination; log collector disabled."
+          exit 0
         fi
 
-        # Export env vars for the flush script
+        mkdir -p "$FOREMAN_LOG_DIR"
+
+        # ── Write the streamer daemon script ──────────────────────
+        cat > "$FOREMAN_LOG_DIR/streamer.sh" << 'STREAMER_SCRIPT'
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        LOG_DIR="$1"
+        PIPE="$LOG_DIR/log.pipe"
+        SEQ_FILE="$LOG_DIR/.seq"
+        echo "0" > "$SEQ_FILE"
+
+        send_chunk() {
+          local content="$1"
+          [[ -z "$content" ]] && return 0
+
+          local seq
+          seq="$(cat "$SEQ_FILE")"
+
+          local payload
+          payload="$(jq -nc \
+            --arg job_name "$FOREMAN_JOB_NAME" \
+            --arg step_name "output" \
+            --argjson step_number 0 \
+            --arg content "$content" \
+            --argjson sequence "$seq" \
+            '{
+              job_name: $job_name,
+              step_name: $step_name,
+              step_number: $step_number,
+              content: $content,
+              sequence: $sequence
+            }')"
+
+          echo "$(( seq + 1 ))" > "$SEQ_FILE"
+
+          if [[ -n "${FOREMAN_CALLBACK_URL:-}" && -n "${FOREMAN_CALLBACK_TOKEN:-}" ]]; then
+            curl --silent --show-error --fail \
+              --retry 1 --max-time 5 \
+              --request POST \
+              --header "Authorization: Bearer $FOREMAN_CALLBACK_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "$payload" \
+              "${FOREMAN_CALLBACK_URL%/}/job_logs" 2>/dev/null || true
+          elif [[ -n "${FOREMAN_PIPELINE_ID:-}" && -n "${FOREMAN_API_TOKEN:-}" ]]; then
+            curl --silent --show-error --fail \
+              --retry 1 --max-time 5 \
+              --request POST \
+              --header "Authorization: Bearer $FOREMAN_API_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "$payload" \
+              "${FOREMAN_BASE_URL%/}/api/pipelines/${FOREMAN_PIPELINE_ID}/admin-callback/job_logs" 2>/dev/null || true
+          fi
+        }
+
+        # Create named pipe
+        mkfifo "$PIPE" 2>/dev/null || true
+
+        buffer=""
+        flush_interval="${FOREMAN_FLUSH_INTERVAL:-5}"
+        last_flush=$(date +%s)
+
+        # Read from pipe, buffer, flush periodically
+        while IFS= read -r -t "$flush_interval" line || true; do
+          if [[ -n "$line" ]]; then
+            buffer+="$line"$'\n'
+          fi
+
+          now=$(date +%s)
+          elapsed=$(( now - last_flush ))
+
+          # Flush if buffer is big enough or interval elapsed
+          buf_len=${#buffer}
+          if [[ $buf_len -gt 32768 ]] || [[ $elapsed -ge $flush_interval && $buf_len -gt 0 ]]; then
+            send_chunk "$buffer"
+            buffer=""
+            last_flush=$now
+          fi
+
+          # Check if pipe is still open (writer closed = EOF)
+          if [[ ! -p "$PIPE" ]]; then
+            break
+          fi
+        done < "$PIPE"
+
+        # Final flush
+        if [[ -n "$buffer" ]]; then
+          send_chunk "$buffer"
+        fi
+        STREAMER_SCRIPT
+        chmod +x "$FOREMAN_LOG_DIR/streamer.sh"
+
+        # ── Write env vars for the streamer ───────────────────────
+        export FOREMAN_JOB_NAME="$JOB_NAME"
+        export FOREMAN_CALLBACK_URL="$CALLBACK_URL"
+        export FOREMAN_CALLBACK_TOKEN="$CALLBACK_TOKEN"
+        export FOREMAN_PIPELINE_ID="$PIPELINE_ID"
+        export FOREMAN_API_TOKEN="$FOREMAN_API_TOKEN"
+        export FOREMAN_BASE_URL="$FOREMAN_BASE_URL"
+        export FOREMAN_FLUSH_INTERVAL="$FLUSH_INTERVAL"
+
+        # Save env for the daemon
+        cat > "$FOREMAN_LOG_DIR/.env" << ENVEOF
+        export FOREMAN_JOB_NAME="$JOB_NAME"
+        export FOREMAN_CALLBACK_URL="$CALLBACK_URL"
+        export FOREMAN_CALLBACK_TOKEN="$CALLBACK_TOKEN"
+        export FOREMAN_PIPELINE_ID="$PIPELINE_ID"
+        export FOREMAN_API_TOKEN="$FOREMAN_API_TOKEN"
+        export FOREMAN_BASE_URL="$FOREMAN_BASE_URL"
+        export FOREMAN_FLUSH_INTERVAL="$FLUSH_INTERVAL"
+        ENVEOF
+
+        # Create the named pipe
+        PIPE="$FOREMAN_LOG_DIR/log.pipe"
+        mkfifo "$PIPE"
+
+        # Start the streamer daemon in background
+        (
+          source "$FOREMAN_LOG_DIR/.env"
+          "$FOREMAN_LOG_DIR/streamer.sh" "$FOREMAN_LOG_DIR" &
+        )
+        STREAMER_PID=$!
+        echo "$STREAMER_PID" > "$FOREMAN_LOG_DIR/.streamer_pid"
+
+        # ── Set BASH_ENV to tee output to the pipe ────────────────
+        cat > "$FOREMAN_LOG_DIR/hook.sh" << 'HOOKEOF'
+        _FOREMAN_PIPE="${FOREMAN_LOG_DIR}/log.pipe"
+        if [[ -p "$_FOREMAN_PIPE" ]]; then
+          exec > >(tee -a "$_FOREMAN_PIPE") 2> >(tee -a "$_FOREMAN_PIPE" >&2)
+        fi
+        HOOKEOF
+
+        # Export for subsequent steps
         {
-          echo "FOREMAN_CALLBACK_URL=$CALLBACK_URL"
-          echo "FOREMAN_CALLBACK_TOKEN=$CALLBACK_TOKEN"
-          echo "FOREMAN_PIPELINE_ID=$PIPELINE_ID"
-          echo "FOREMAN_BASE_URL=$FOREMAN_BASE_URL"
-          echo "FOREMAN_API_TOKEN=$FOREMAN_API_TOKEN"
-          echo "FOREMAN_JOB_NAME=$JOB_NAME"
+          echo "FOREMAN_LOG_DIR=$FOREMAN_LOG_DIR"
+          echo "BASH_ENV=$FOREMAN_LOG_DIR/hook.sh"
         } >> "$GITHUB_ENV"
 
-        # Install the BASH_ENV hook so every subsequent bash step auto-sources the interceptor
-        echo "BASH_ENV=$FOREMAN_LOG_DIR/interceptor.sh" >> "$GITHUB_ENV"
-
-        echo "Log collector activated for job: $JOB_NAME"
-
-    # ── POST: Flush logs and clean up ─────────────────────────────
-    - name: Flush logs to Foreman
-      if: always()
-      shell: bash
-      env:
-        FOREMAN_LOG_DIR: ${{ runner.temp }}/_foreman_logs
-      run: |
-        set -euo pipefail
-
-        # Unset BASH_ENV to prevent interceptor from running during flush
-        unset BASH_ENV
-
-        if [[ -x "$FOREMAN_LOG_DIR/flush.sh" ]]; then
-          "$FOREMAN_LOG_DIR/flush.sh" || echo "::warning::Log flush to Foreman failed"
-        fi
-
-        # Cleanup
-        rm -rf "$FOREMAN_LOG_DIR"
-        echo "Log collector cleaned up"
+        echo "Log streamer started (flush every ${FLUSH_INTERVAL}s)"

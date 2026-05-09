@@ -450,6 +450,7 @@ jobs:
     with:
       run-level: ${{ needs.gate.outputs.run_level }}
       changed-projects: ${{ needs.gate.outputs.changed_projects }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   # ╔════════════════════════════════════════════════════════════════╗
@@ -474,6 +475,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   cgit:
@@ -489,6 +491,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   cmark:
@@ -504,6 +507,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   corebinutils:
@@ -519,6 +523,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   genqrcode:
@@ -534,6 +539,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   neozip:
@@ -551,6 +557,7 @@ jobs:
       security-events: write
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   # ── C++ / Library Projects ──────────────────────────────────────
@@ -568,6 +575,7 @@ jobs:
       security-events: write
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   libnbtplusplus:
@@ -583,6 +591,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   tomlplusplus:
@@ -598,6 +607,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   # ── Java / Minecraft Projects ───────────────────────────────────
@@ -613,6 +623,7 @@ jobs:
     with:
       build-type: ${{ needs.gate.outputs.build_type }}
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     permissions:
       contents: read
       id-token: write
@@ -632,6 +643,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   # ── Container & Docker ──────────────────────────────────────────
@@ -649,6 +661,7 @@ jobs:
       packages: write
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   # ╔════════════════════════════════════════════════════════════════╗
@@ -671,6 +684,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   json4cpp-fuzz:
@@ -686,6 +700,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   json4cpp-amalgam:
@@ -701,6 +716,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   tomlplusplus-fuzz:
@@ -717,6 +733,7 @@ jobs:
       security-events: write
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   neozip-fuzz:
@@ -732,6 +749,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   mnv-codeql:
@@ -748,6 +766,7 @@ jobs:
       security-events: write
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   neozip-codeql:
@@ -765,6 +784,7 @@ jobs:
       security-events: write
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   # ╔════════════════════════════════════════════════════════════════╗
@@ -785,6 +805,7 @@ jobs:
       packages: write
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   meshmc-nix:
@@ -800,6 +821,7 @@ jobs:
       contents: read
     with:
       source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     secrets: inherit
 
   # ╔════════════════════════════════════════════════════════════════╗
@@ -815,6 +837,7 @@ jobs:
       source-ref: ${{ github.event.inputs.source-ref || github.ref }}
       source-repository: ${{ github.event.inputs.source-repository || '' }}
       beta_source_only: ${{ fromJSON(needs.gate.outputs.jobs_json).beta_source_only }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
     permissions:
       contents: write
       id-token: write
@@ -832,7 +855,7 @@ jobs:
   report-lint:
     name: "Report: Lint"
     needs: [callback-start, lint]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.lint.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -847,7 +870,7 @@ jobs:
   report-mnv:
     name: "Report: MNV"
     needs: [callback-start, mnv]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.mnv.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -862,7 +885,7 @@ jobs:
   report-cgit:
     name: "Report: CGit"
     needs: [callback-start, cgit]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.cgit.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -877,7 +900,7 @@ jobs:
   report-cmark:
     name: "Report: CMark"
     needs: [callback-start, cmark]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.cmark.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -892,7 +915,7 @@ jobs:
   report-corebinutils:
     name: "Report: CoreBinutils"
     needs: [callback-start, corebinutils]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.corebinutils.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -907,7 +930,7 @@ jobs:
   report-genqrcode:
     name: "Report: GenQRCode"
     needs: [callback-start, genqrcode]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.genqrcode.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -922,7 +945,7 @@ jobs:
   report-neozip:
     name: "Report: NeoZip"
     needs: [callback-start, neozip]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.neozip.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -937,7 +960,7 @@ jobs:
   report-json4cpp:
     name: "Report: JSON4CPP"
     needs: [callback-start, json4cpp]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.json4cpp.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -952,7 +975,7 @@ jobs:
   report-libnbtplusplus:
     name: "Report: libNBT++"
     needs: [callback-start, libnbtplusplus]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.libnbtplusplus.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -967,7 +990,7 @@ jobs:
   report-tomlplusplus:
     name: "Report: TOML++"
     needs: [callback-start, tomlplusplus]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.tomlplusplus.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -982,7 +1005,7 @@ jobs:
   report-meshmc:
     name: "Report: MeshMC"
     needs: [callback-start, meshmc]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.meshmc.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -997,7 +1020,7 @@ jobs:
   report-forgewrapper:
     name: "Report: ForgeWrapper"
     needs: [callback-start, forgewrapper]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.forgewrapper.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -1012,7 +1035,7 @@ jobs:
   report-imagesplusplus:
     name: "Report: Docker Images"
     needs: [callback-start, imagesplusplus]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.imagesplusplus.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -1027,7 +1050,13 @@ jobs:
   report-analysis:
     name: "Report: Analysis"
     needs: [callback-start, cmark-fuzz, json4cpp-fuzz, json4cpp-amalgam, tomlplusplus-fuzz, neozip-fuzz, mnv-codeql, neozip-codeql]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: >-
+      always() &&
+      needs.callback-start.outputs.pipeline_id != '' &&
+      (needs.cmark-fuzz.result != 'skipped' || needs.json4cpp-fuzz.result != 'skipped' ||
+       needs.json4cpp-amalgam.result != 'skipped' || needs.tomlplusplus-fuzz.result != 'skipped' ||
+       needs.neozip-fuzz.result != 'skipped' || needs.mnv-codeql.result != 'skipped' ||
+       needs.neozip-codeql.result != 'skipped')
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -1052,7 +1081,10 @@ jobs:
   report-containers:
     name: "Report: Containers"
     needs: [callback-start, meshmc-container, meshmc-nix]
-    if: always() && needs.callback-start.outputs.pipeline_id != ''
+    if: >-
+      always() &&
+      needs.callback-start.outputs.pipeline_id != '' &&
+      (needs.meshmc-container.result != 'skipped' || needs.meshmc-nix.result != 'skipped')
     runs-on: ubuntu-latest
     permissions: {}
     steps:
