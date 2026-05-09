@@ -1,0 +1,149 @@
+name: foreman-2.0 CI
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+      foreman-pipeline-id:
+        description: Foreman pipeline ID for log streaming.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  rspec:
+    name: RSpec + config validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: foreman_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      RAILS_ENV: test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/foreman_test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/foreman_test
+      REDIS_URL: redis://localhost:6379/0
+      BUNDLE_PATH: vendor/bundle
+
+    steps:
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
+
+      - name: Checkout
+        uses: Project-Tick-Infrastructure/checkout@v2
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+          submodules: true
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Validate repo_registry.yml
+        run: |
+          bundle exec ruby -r yaml -r json -e '
+            data = YAML.safe_load_file("config/repo_registry.yml")
+            repos = data["repos"] || []
+            raise "no repos defined" if repos.empty?
+            names = repos.map { |r| r["name"] }
+            dupes = names.tally.select { |_, c| c > 1 }.keys
+            raise "duplicate repo names: #{dupes}" if dupes.any?
+            allowed_caps = %w[amalgam codeql container coverity docs fuzz nix]
+            allowed_events = %w[mr push tag]
+            repos.each do |r|
+              raise "missing name" if r["name"].to_s.empty?
+              raise "missing paths for #{r["name"]}" if Array(r["paths"]).empty?
+              caps = Array(r["capabilities"])
+              extra = caps - allowed_caps
+              raise "unknown capabilities for #{r["name"]}: #{extra}" if extra.any?
+              evt = Array(r.fetch("event_types", %w[mr push])) - allowed_events
+              raise "unknown event_types for #{r["name"]}: #{evt}" if evt.any?
+            end
+            puts "repo_registry.yml OK (#{repos.size} repos)"
+          '
+
+      - name: Validate labeler.yml
+        run: |
+          bundle exec ruby -r yaml -e '
+            data = YAML.safe_load_file("config/labeler.yml") || {}
+            raise "no labels defined" if data.empty?
+            data.each do |label, rules|
+              Array(rules).each do |rule|
+                Array(rule["any"]).each do |cond|
+                  globs = cond.dig("changed-files")
+                  raise "rule under #{label} missing globs" if globs.nil?
+                end
+              end
+            end
+            puts "labeler.yml OK (#{data.size} labels)"
+          '
+
+      - name: Database setup
+        run: bin/rails db:prepare
+
+      - name: Run RSpec
+        run: bundle exec rspec --format documentation
+
+      - name: Boot smoke check
+        run: bundle exec rails runner "puts 'booted ' + Rails.application.class.name"
+
+  lint:
+    name: Lint (rubocop optional, syntax check)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Ruby syntax check on app/, lib/, spec/, config/
+        run: |
+          set -e
+          fail=0
+          for f in $(find app lib spec config -name '*.rb'); do
+            ruby -c "$f" >/dev/null || fail=1
+          done
+          exit $fail

@@ -825,6 +825,23 @@ jobs:
       foreman-pipeline-id: ${{ needs.gate.outputs.pipeline_id }}
     secrets: inherit
 
+  foreman20:
+    name: "Foreman 2.0"
+    needs: [gate, lint]
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      fromJSON(needs.gate.outputs.jobs_json).foreman-2.0
+    uses: ./.github/workflows/foreman-2.0-ci.yml
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      source-repository: ${{ github.event.inputs.source-repository || '' }}
+      foreman-pipeline-id: ${{ needs.gate.outputs.pipeline_id }}
+    secrets: inherit
+
   # ╔════════════════════════════════════════════════════════════════╗
   # ║  STAGE 7 — Release (tag pushes only)                           ║
   # ╚════════════════════════════════════════════════════════════════╝
@@ -1048,6 +1065,21 @@ jobs:
           status: ${{ needs.imagesplusplus.result == 'success' && 'success' || (needs.imagesplusplus.result == 'skipped' && 'skipped' || (needs.imagesplusplus.result == 'cancelled' && 'cancelled' || 'failure')) }}
           conclusion: ${{ needs.imagesplusplus.result }}
 
+  report-foreman20:
+    name: "Report: Foreman 2.0"
+    needs: [callback-start, foreman20]
+    if: always() && needs.callback-start.outputs.pipeline_id != '' && needs.foreman.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - uses: Project-Tick/Project-Tick/.github/actions/foreman-job-callback@master
+        with:
+          pipeline_id: ${{ needs.callback-start.outputs.pipeline_id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN || '' }}
+          job_name: Docker Images
+          status: ${{ needs.foreman20.result == 'success' && 'success' || (needs.foreman20.result == 'skipped' && 'skipped' || (needs.foreman20.result == 'cancelled' && 'cancelled' || 'failure')) }}
+          conclusion: ${{ needs.foreman20.result }}
+
   report-analysis:
     name: "Report: Analysis"
     needs: [callback-start, cmark-fuzz, json4cpp-fuzz, json4cpp-amalgam, tomlplusplus-fuzz, neozip-fuzz, mnv-codeql, neozip-codeql]
@@ -1135,6 +1167,7 @@ jobs:
       - neozip-codeql
       - meshmc-container
       - meshmc-nix
+      - foreman20
     runs-on: ubuntu-latest
     steps:
       - name: Report Verdict job started
@@ -1198,6 +1231,7 @@ jobs:
           check_job "NeoZip CodeQL"  "${{ needs.neozip-codeql.result }}"
           check_job "MeshMC Docker"  "${{ needs.meshmc-container.result }}"
           check_job "MeshMC Nix"     "${{ needs.meshmc-nix.result }}"
+          check_job "Foreman 2.0"    "${{ needs.foreman20.result }}"
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
@@ -1249,6 +1283,7 @@ jobs:
       - meshmc-nix
       - verdict
       - release-sources
+      - foreman20
     if: >-
       always() &&
       (
