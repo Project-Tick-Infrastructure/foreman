@@ -1,8 +1,9 @@
 name: Log Collector
 description: >
-  Captures stdout/stderr from subsequent bash steps via BASH_ENV hook,
-  writes to per-step log files, and flushes to Foreman periodically
-  via a background cron loop. Call once at the start of each job.
+  Captures logs from all subsequent steps using pre/main/post lifecycle.
+  pre: install interceptor (BASH_ENV hook + per-step log files)
+  main: activate streamer that flushes logs to Foreman every 5s
+  post: do final flush, send remaining logs, cleanup
 
 inputs:
   callback_url:
@@ -14,7 +15,7 @@ inputs:
     required: false
     default: ""
   pipeline_id:
-    description: Foreman pipeline ID for admin-authenticated callbacks.
+    description: Foreman pipeline ID.
     required: false
     default: ""
   foreman_base_url:
@@ -30,132 +31,7 @@ inputs:
     required: true
 
 runs:
-  using: composite
-  steps:
-    - name: Initialize log collector
-      shell: bash
-      env:
-        _LC_DIR: ${{ runner.temp }}/_foreman_logs
-        _LC_CB_URL: ${{ inputs.callback_url }}
-        _LC_CB_TOKEN: ${{ inputs.callback_token }}
-        _LC_PID: ${{ inputs.pipeline_id }}
-        _LC_BASE: ${{ inputs.foreman_base_url }}
-        _LC_API: ${{ inputs.foreman_api_token }}
-        _LC_JOB: ${{ inputs.job_name }}
-      run: |
-        set -euo pipefail
-
-        if [[ -z "$_LC_CB_URL$_LC_PID" ]]; then
-          echo "No Foreman destination; log collector disabled."
-          exit 0
-        fi
-
-        mkdir -p "$_LC_DIR"
-        echo "0" > "$_LC_DIR/.seq"
-        echo "-1" > "$_LC_DIR/.step"
-
-        # Save config for later use
-        cat > "$_LC_DIR/.config" << CFGEOF
-        _LC_CB_URL="$_LC_CB_URL"
-        _LC_CB_TOKEN="$_LC_CB_TOKEN"
-        _LC_PID="$_LC_PID"
-        _LC_BASE="$_LC_BASE"
-        _LC_API="$_LC_API"
-        _LC_JOB="$_LC_JOB"
-        CFGEOF
-
-        # ── flush.sh: sends a single log file to Foreman ─────────
-        cat > "$_LC_DIR/flush.sh" << 'FLUSHEOF'
-        #!/usr/bin/env bash
-        set -euo pipefail
-        DIR="$1"
-        source "$DIR/.config"
-
-        seq_file="$DIR/.seq"
-
-        for f in "$DIR"/step_*.log; do
-          [ -f "$f" ] || continue
-          marker="$f.sent"
-          content="$(cat "$f")"
-          prev=""
-          [ -f "$marker" ] && prev="$(cat "$marker")"
-          [ "$content" = "$prev" ] && continue
-          [ -z "$content" ] && continue
-
-          bn="$(basename "$f" .log)"
-          snum="${bn#step_}"
-
-          seq="$(cat "$seq_file")"
-          payload="$(jq -nc \
-            --arg jn "$_LC_JOB" \
-            --arg sn "step-$snum" \
-            --argjson snum "${snum:-0}" \
-            --arg c "$content" \
-            --argjson sq "$seq" \
-            '{job_name:$jn,step_name:$sn,step_number:$snum,content:$c,sequence:$sq}')"
-          echo "$(( seq + 1 ))" > "$seq_file"
-
-          if [ -n "$_LC_CB_URL" ] && [ -n "$_LC_CB_TOKEN" ]; then
-            curl -sf --retry 1 --max-time 8 \
-              -H "Authorization: Bearer $_LC_CB_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "$payload" \
-              "${_LC_CB_URL%/}/job_logs" 2>/dev/null || true
-          elif [ -n "$_LC_PID" ] && [ -n "$_LC_API" ]; then
-            curl -sf --retry 1 --max-time 8 \
-              -H "Authorization: Bearer $_LC_API" \
-              -H "Content-Type: application/json" \
-              -d "$payload" \
-              "${_LC_BASE%/}/api/pipelines/${_LC_PID}/admin-callback/job_logs" 2>/dev/null || true
-          fi
-          cp "$f" "$marker"
-        done
-        FLUSHEOF
-        chmod +x "$_LC_DIR/flush.sh"
-
-        # ── hook.sh: sourced by BASH_ENV before every bash step ───
-        cat > "$_LC_DIR/hook.sh" << 'HOOKEOF'
-        if [ -d "${FOREMAN_LOG_DIR:-}" ]; then
-          _sfile="$FOREMAN_LOG_DIR/.step"
-          _snum=$(( $(cat "$_sfile" 2>/dev/null || echo -1) + 1 ))
-          echo "$_snum" > "$_sfile"
-          _logf="$FOREMAN_LOG_DIR/step_${_snum}.log"
-          exec > >(tee -a "$_logf") 2> >(tee -a "$_logf" >&2)
-        fi
-        HOOKEOF
-
-        # ── Background flusher: runs every 5s ─────────────────────
-        (
-          while true; do
-            sleep 5
-            "$_LC_DIR/flush.sh" "$_LC_DIR" 2>/dev/null || true
-          done
-        ) &
-        echo "$!" > "$_LC_DIR/.flusher_pid"
-
-        # Export env vars
-        {
-          echo "FOREMAN_LOG_DIR=$_LC_DIR"
-          echo "BASH_ENV=$_LC_DIR/hook.sh"
-        } >> "$GITHUB_ENV"
-
-        echo "::notice::Log collector active for job: $_LC_JOB (flush every 5s)"
-
-    - name: Finalize log collector
-      if: always()
-      shell: bash
-      run: |
-        _dir="${FOREMAN_LOG_DIR:-${{ runner.temp }}/_foreman_logs}"
-        [ -d "$_dir" ] || exit 0
-
-        # Kill background flusher
-        [ -f "$_dir/.flusher_pid" ] && kill "$(cat "$_dir/.flusher_pid")" 2>/dev/null || true
-
-        # Unset hook to avoid capturing this step
-        unset BASH_ENV
-
-        # Final flush
-        [ -x "$_dir/flush.sh" ] && "$_dir/flush.sh" "$_dir" || true
-
-        # Cleanup
-        rm -rf "$_dir"
+  using: node20
+  pre: pre.js
+  main: main.js
+  post: post.js
