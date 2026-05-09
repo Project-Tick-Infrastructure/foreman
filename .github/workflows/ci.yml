@@ -832,7 +832,7 @@ jobs:
       always() &&
       !cancelled() &&
       (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
-      fromJSON(needs.gate.outputs.jobs_json).foreman-2.0
+      fromJSON(needs.gate.outputs.jobs_json).foreman-20
     uses: ./.github/workflows/foreman-2.0-ci.yml
     permissions:
       contents: read
