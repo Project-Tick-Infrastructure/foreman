@@ -4,6 +4,8 @@ description: >
   Supports both monorepo (project-tick/project-tick) and polyrepo layouts.
   When source-repository is provided (always sent by Foreman for polyrepo),
   the external source is checked out instead of the workflow repository.
+  Adds first-class support for SHA-256 git object format and end-to-end
+  content integrity verification (commit OID + deterministic tree hash).
 
 inputs:
   fetch-depth:
@@ -33,6 +35,59 @@ inputs:
   show-progress:
     description: Whether checkout progress should be shown.
     default: "true"
+  object-format:
+    description: >
+      Git object format for the external checkout. One of: sha1, sha256.
+      Only honored on the external checkout path; current/custom repository
+      checkouts go through actions/checkout which inherits the upstream format.
+      Requires a git build with sha256 support when set to sha256.
+    default: "sha1"
+  expected-commit-sha:
+    description: >
+      If non-empty, the resolved commit OID after checkout must match this
+      value (case-insensitive). Accepts both 40-char sha1 and 64-char sha256
+      digests; the format is auto-detected from the length.
+    default: ""
+  expected-tree-sha256:
+    description: >
+      If non-empty, the deterministic SHA-256 content hash of the checked-out
+      working tree must match this value (lowercase hex, 64 chars). The hash
+      is computed independently of git, over (relative path, mode, content)
+      tuples sorted by path, so it is reproducible across object formats.
+    default: ""
+  emit-tree-sha256:
+    description: >
+      When "true", always compute and emit the tree-sha256 output, even if
+      expected-tree-sha256 is empty. Useful for recording provenance.
+    default: "false"
+  verification-mode:
+    description: >
+      How to react to a verification mismatch. "enforce" (default) fails the
+      step. "warn" prints an error annotation but allows the workflow to
+      continue. Anything else is treated as "enforce".
+    default: "enforce"
+
+outputs:
+  source-mode:
+    description: Which checkout path was taken. One of "external", "current", "custom".
+    value: ${{ steps.summary.outputs.source-mode }}
+  object-format-used:
+    description: Git object format that was actually used (sha1 or sha256).
+    value: ${{ steps.summary.outputs.object-format-used }}
+  commit-sha:
+    description: The resolved commit OID of the checked-out tree.
+    value: ${{ steps.summary.outputs.commit-sha }}
+  tree-sha256:
+    description: >
+      Deterministic SHA-256 content hash of the checked-out tree. Empty when
+      neither expected-tree-sha256 nor emit-tree-sha256 was requested.
+    value: ${{ steps.summary.outputs.tree-sha256 }}
+  verified:
+    description: >
+      "true" if every requested verification (commit and/or tree) passed.
+      "false" if any check failed (only reachable when verification-mode=warn).
+      "skipped" when no verification was requested.
+    value: ${{ steps.summary.outputs.verified }}
 
 runs:
   using: composite
@@ -48,6 +103,10 @@ runs:
         INPUT_SOURCE_REF: ${{ inputs.source-ref }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         INPUT_REF: ${{ inputs.ref }}
+        INPUT_OBJECT_FORMAT: ${{ inputs.object-format }}
+        INPUT_EXPECTED_COMMIT_SHA: ${{ inputs.expected-commit-sha }}
+        INPUT_EXPECTED_TREE_SHA256: ${{ inputs.expected-tree-sha256 }}
+        INPUT_VERIFICATION_MODE: ${{ inputs.verification-mode }}
         DEFAULT_SOURCE_REF: ${{ github.event.inputs.source-ref || github.ref || 'refs/heads/master' }}
       run: |
         set -euo pipefail
@@ -76,13 +135,52 @@ runs:
           source_ref="${EVENT_SOURCE_REF:-$DEFAULT_SOURCE_REF}"
         fi
 
+        # Normalize and validate object-format.
+        object_format="$(printf '%s' "$INPUT_OBJECT_FORMAT" | tr '[:upper:]' '[:lower:]')"
+        case "$object_format" in
+          ""|sha1) object_format="sha1" ;;
+          sha256)  object_format="sha256" ;;
+          *)
+            echo "::error title=source-checkout::Invalid object-format '$INPUT_OBJECT_FORMAT' (expected sha1 or sha256)"
+            exit 1
+            ;;
+        esac
+
+        # Validate expected-commit-sha shape (only when provided).
+        expected_commit="$(printf '%s' "$INPUT_EXPECTED_COMMIT_SHA" | tr '[:upper:]' '[:lower:]')"
+        if [[ -n "$expected_commit" ]]; then
+          if [[ ! "$expected_commit" =~ ^[0-9a-f]{40}$ ]] && [[ ! "$expected_commit" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error title=source-checkout::expected-commit-sha must be a 40 or 64 character lowercase hex digest"
+            exit 1
+          fi
+        fi
+
+        # Validate expected-tree-sha256 shape (only when provided).
+        expected_tree="$(printf '%s' "$INPUT_EXPECTED_TREE_SHA256" | tr '[:upper:]' '[:lower:]')"
+        if [[ -n "$expected_tree" ]] && [[ ! "$expected_tree" =~ ^[0-9a-f]{64}$ ]]; then
+          echo "::error title=source-checkout::expected-tree-sha256 must be a 64 character lowercase hex digest"
+          exit 1
+        fi
+
+        # Normalize verification-mode.
+        verification_mode="$(printf '%s' "$INPUT_VERIFICATION_MODE" | tr '[:upper:]' '[:lower:]')"
+        case "$verification_mode" in
+          warn) verification_mode="warn" ;;
+          *)    verification_mode="enforce" ;;
+        esac
+
         {
           echo "use-external=$use_external"
           echo "source-repository=$source_repository"
           echo "source-ref=$source_ref"
+          echo "object-format=$object_format"
+          echo "expected-commit-sha=$expected_commit"
+          echo "expected-tree-sha256=$expected_tree"
+          echo "verification-mode=$verification_mode"
         } >> "$GITHUB_OUTPUT"
 
     - name: Checkout external source
+      id: external
       if: ${{ steps.resolve.outputs.use-external == 'true' }}
       shell: bash
       env:
@@ -94,6 +192,7 @@ runs:
         SOURCE_AUTH_TOKEN: ${{ secrets.PT_GITLAB_SOURCE_TOKEN || '' }}
         SOURCE_AUTH_USERNAME: ${{ vars.PT_GITLAB_SOURCE_USERNAME || 'oauth2' }}
         SUBMODULES: ${{ inputs.submodules }}
+        OBJECT_FORMAT: ${{ steps.resolve.outputs.object-format }}
       run: |
         set -euo pipefail
 
@@ -110,7 +209,26 @@ runs:
         mkdir -p "$target_dir"
         find "$target_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
         git config --global --add safe.directory "*"
-        git init "$target_dir"
+
+        # Probe sha256 support before init. git --object-format=sha256 needs
+        # a git built with the experimental hash backend (>=2.42 in practice).
+        if [[ "$OBJECT_FORMAT" == "sha256" ]]; then
+          if ! git --version >/dev/null 2>&1; then
+            echo "::error title=source-checkout::git is not available on PATH"
+            exit 1
+          fi
+          probe_dir="$(mktemp -d)"
+          if ! git init --object-format=sha256 "$probe_dir" >/dev/null 2>&1; then
+            rm -rf "$probe_dir"
+            echo "::error title=source-checkout::This git build does not support --object-format=sha256. Upgrade git or set object-format=sha1."
+            exit 1
+          fi
+          rm -rf "$probe_dir"
+          git init --object-format=sha256 "$target_dir"
+        else
+          git init "$target_dir"
+        fi
+
         git -C "$target_dir" config advice.detachedHead false
         git -C "$target_dir" remote add origin "$repo_url"
 
@@ -136,7 +254,16 @@ runs:
             ;;
         esac
 
+        actual_format="$(git -C "$target_dir" rev-parse --show-object-format 2>/dev/null || echo "$OBJECT_FORMAT")"
+        commit_sha="$(git -C "$target_dir" rev-parse HEAD)"
+        {
+          echo "target-dir=$target_dir"
+          echo "object-format-used=$actual_format"
+          echo "commit-sha=$commit_sha"
+        } >> "$GITHUB_OUTPUT"
+
     - name: Checkout current repository
+      id: current
       if: ${{ steps.resolve.outputs.use-external != 'true' && inputs.repository == '' }}
       uses: actions/checkout@v6
       with:
@@ -147,6 +274,7 @@ runs:
         submodules: ${{ inputs.submodules }}
 
     - name: Checkout custom repository
+      id: custom
       if: ${{ steps.resolve.outputs.use-external != 'true' && inputs.repository != '' }}
       uses: actions/checkout@v6
       with:
@@ -156,3 +284,222 @@ runs:
         repository: ${{ inputs.repository }}
         show-progress: ${{ inputs.show-progress }}
         submodules: ${{ inputs.submodules }}
+
+    - name: Resolve checkout target metadata
+      id: meta
+      shell: bash
+      env:
+        USE_EXTERNAL: ${{ steps.resolve.outputs.use-external }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_PATH: ${{ inputs.path }}
+        EXTERNAL_TARGET_DIR: ${{ steps.external.outputs.target-dir }}
+        EXTERNAL_OBJECT_FORMAT: ${{ steps.external.outputs.object-format-used }}
+        EXTERNAL_COMMIT_SHA: ${{ steps.external.outputs.commit-sha }}
+      run: |
+        set -euo pipefail
+
+        if [[ "$USE_EXTERNAL" == "true" ]]; then
+          source_mode="external"
+          target_dir="$EXTERNAL_TARGET_DIR"
+          object_format_used="$EXTERNAL_OBJECT_FORMAT"
+          commit_sha="$EXTERNAL_COMMIT_SHA"
+        else
+          if [[ -n "$INPUT_REPOSITORY" ]]; then
+            source_mode="custom"
+          else
+            source_mode="current"
+          fi
+          target_dir="$GITHUB_WORKSPACE"
+          if [[ "$INPUT_PATH" != "." ]]; then
+            target_dir="$GITHUB_WORKSPACE/$INPUT_PATH"
+          fi
+          if git -C "$target_dir" rev-parse --git-dir >/dev/null 2>&1; then
+            object_format_used="$(git -C "$target_dir" rev-parse --show-object-format 2>/dev/null || echo sha1)"
+            commit_sha="$(git -C "$target_dir" rev-parse HEAD 2>/dev/null || echo "")"
+          else
+            object_format_used="sha1"
+            commit_sha=""
+          fi
+        fi
+
+        {
+          echo "source-mode=$source_mode"
+          echo "target-dir=$target_dir"
+          echo "object-format-used=$object_format_used"
+          echo "commit-sha=$commit_sha"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Verify commit OID
+      id: verify-commit
+      shell: bash
+      env:
+        EXPECTED: ${{ steps.resolve.outputs.expected-commit-sha }}
+        ACTUAL: ${{ steps.meta.outputs.commit-sha }}
+        MODE: ${{ steps.resolve.outputs.verification-mode }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "$EXPECTED" ]]; then
+          echo "status=skipped" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        actual_lc="$(printf '%s' "$ACTUAL" | tr '[:upper:]' '[:lower:]')"
+        if [[ -z "$actual_lc" ]]; then
+          msg="commit verification requested but no commit OID could be determined"
+          if [[ "$MODE" == "warn" ]]; then
+            echo "::warning title=source-checkout::$msg"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error title=source-checkout::$msg"
+          exit 1
+        fi
+
+        if [[ "$actual_lc" == "$EXPECTED" ]]; then
+          echo "Commit OID verified: $actual_lc"
+          echo "status=passed" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        msg="commit OID mismatch (expected=$EXPECTED actual=$actual_lc)"
+        if [[ "$MODE" == "warn" ]]; then
+          echo "::warning title=source-checkout::$msg"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        echo "::error title=source-checkout::$msg"
+        exit 1
+
+    - name: Compute and verify tree SHA-256
+      id: verify-tree
+      shell: bash
+      env:
+        TARGET_DIR: ${{ steps.meta.outputs.target-dir }}
+        EXPECTED: ${{ steps.resolve.outputs.expected-tree-sha256 }}
+        EMIT: ${{ inputs.emit-tree-sha256 }}
+        MODE: ${{ steps.resolve.outputs.verification-mode }}
+      run: |
+        set -euo pipefail
+
+        emit="$(printf '%s' "$EMIT" | tr '[:upper:]' '[:lower:]')"
+        if [[ -z "$EXPECTED" ]] && [[ "$emit" != "true" ]]; then
+          {
+            echo "tree-sha256="
+            echo "status=skipped"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if [[ ! -d "$TARGET_DIR" ]]; then
+          msg="tree hashing requested but target directory '$TARGET_DIR' is missing"
+          if [[ "$MODE" == "warn" ]]; then
+            echo "::warning title=source-checkout::$msg"
+            {
+              echo "tree-sha256="
+              echo "status=failed"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error title=source-checkout::$msg"
+          exit 1
+        fi
+
+        # Deterministic content hash:
+        #   * Walk every regular file and symlink under TARGET_DIR
+        #   * Skip the .git metadata directory (we hash content, not git internals)
+        #   * Per entry emit: "<mode>\t<relpath>\t<sha256(content or symlink target)>\n"
+        #   * Sort the resulting lines by relpath using the C locale
+        #   * Final hash = sha256 of the concatenated, sorted manifest
+        # This is independent of the underlying git object format, so the
+        # same digest is produced for sha1 and sha256 repositories alike.
+        manifest="$(mktemp)"
+        find "$TARGET_DIR" \
+          \( -path "$TARGET_DIR/.git" -o -path "$TARGET_DIR/.git/*" \) -prune \
+          -o \( -type f -o -type l \) -print0 \
+          | LC_ALL=C sort -z \
+          | while IFS= read -r -d '' entry; do
+              rel="${entry#"$TARGET_DIR"/}"
+              if [[ -L "$entry" ]]; then
+                target="$(readlink -- "$entry")"
+                digest="$(printf '%s' "$target" | sha256sum | awk '{print $1}')"
+                printf '120000\t%s\t%s\n' "$rel" "$digest"
+              else
+                if [[ -x "$entry" ]]; then
+                  mode="100755"
+                else
+                  mode="100644"
+                fi
+                digest="$(sha256sum -- "$entry" | awk '{print $1}')"
+                printf '%s\t%s\t%s\n' "$mode" "$rel" "$digest"
+              fi
+            done > "$manifest"
+
+        tree_sha="$(sha256sum -- "$manifest" | awk '{print $1}')"
+        rm -f "$manifest"
+
+        echo "tree-sha256=$tree_sha" >> "$GITHUB_OUTPUT"
+
+        if [[ -z "$EXPECTED" ]]; then
+          echo "Computed tree SHA-256: $tree_sha"
+          echo "status=skipped" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if [[ "$tree_sha" == "$EXPECTED" ]]; then
+          echo "Tree SHA-256 verified: $tree_sha"
+          echo "status=passed" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        msg="tree SHA-256 mismatch (expected=$EXPECTED actual=$tree_sha)"
+        if [[ "$MODE" == "warn" ]]; then
+          echo "::warning title=source-checkout::$msg"
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        echo "::error title=source-checkout::$msg"
+        exit 1
+
+    - name: Summarize outputs
+      id: summary
+      shell: bash
+      env:
+        SOURCE_MODE: ${{ steps.meta.outputs.source-mode }}
+        OBJECT_FORMAT_USED: ${{ steps.meta.outputs.object-format-used }}
+        COMMIT_SHA: ${{ steps.meta.outputs.commit-sha }}
+        TREE_SHA: ${{ steps.verify-tree.outputs.tree-sha256 }}
+        COMMIT_STATUS: ${{ steps.verify-commit.outputs.status }}
+        TREE_STATUS: ${{ steps.verify-tree.outputs.status }}
+      run: |
+        set -euo pipefail
+
+        if [[ "$COMMIT_STATUS" == "skipped" ]] && [[ "$TREE_STATUS" == "skipped" ]]; then
+          verified="skipped"
+        elif [[ "$COMMIT_STATUS" == "failed" ]] || [[ "$TREE_STATUS" == "failed" ]]; then
+          verified="false"
+        else
+          verified="true"
+        fi
+
+        {
+          echo "source-mode=$SOURCE_MODE"
+          echo "object-format-used=$OBJECT_FORMAT_USED"
+          echo "commit-sha=$COMMIT_SHA"
+          echo "tree-sha256=$TREE_SHA"
+          echo "verified=$verified"
+        } >> "$GITHUB_OUTPUT"
+
+        {
+          echo "### source-checkout"
+          echo ""
+          echo "| field | value |"
+          echo "| --- | --- |"
+          echo "| source-mode | \`$SOURCE_MODE\` |"
+          echo "| object-format-used | \`$OBJECT_FORMAT_USED\` |"
+          echo "| commit-sha | \`${COMMIT_SHA:-<none>}\` |"
+          echo "| tree-sha256 | \`${TREE_SHA:-<none>}\` |"
+          echo "| commit verification | \`$COMMIT_STATUS\` |"
+          echo "| tree verification | \`$TREE_STATUS\` |"
+          echo "| verified | \`$verified\` |"
+        } >> "$GITHUB_STEP_SUMMARY"

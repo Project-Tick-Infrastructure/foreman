@@ -68,7 +68,7 @@ jobs:
           job_name: ${{ github.job }}
 
       - name: Checkout
-        uses: Project-Tick-Infrastructure/checkout@v2
+        uses: Project-Tick-Infrastructure/checkout@v3
         with:
           source-repository: ${{ inputs.source-repository || '' }}
           submodules: true
@@ -132,7 +132,19 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Start log collector
+        if: inputs.foreman-pipeline-id != ''
+        uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+        with:
+          pipeline_id: ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name: ${{ github.job }}
+
+      - name: Checkout
+        uses: Project-Tick-Infrastructure/checkout@v3
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+          submodules: true
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
