@@ -173,14 +173,6 @@ jobs:
           VERSION: ${{ needs.resolve.outputs.version }}
         run: echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      # FIXME FIXME FIXME: Fix Patch
-      - name: Patch CMakeLists.txt for bundled libraries
-        shell: bash
-        run: |
-          if [[ -f ".github/patches/0001-GHA-RELEASE-Prepare-tarball-with-libraries-in-CMake.patch" ]]; then
-            git apply .github/patches/0001-GHA-RELEASE-Prepare-tarball-with-libraries-in-CMake.patch
-          fi
-
       - name: Prepare source tree
         id: prepare
         uses: Project-Tick/Project-Tick/.github/actions/prepare-source-tree@master
