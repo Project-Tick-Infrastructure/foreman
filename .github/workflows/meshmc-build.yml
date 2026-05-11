@@ -417,10 +417,110 @@ jobs:
           echo "CMAKE_PREFIX_PATH=$INSTALL_PREFIX" >> "$GITHUB_ENV"
           echo "$INSTALL_PREFIX/bin" >> "$GITHUB_PATH"
 
+      ##
+      # PLUGIN SIGNING — import the official GPG key into the runner's
+      # keyring so MMCOSign.cmake can attach a detached signature trailer
+      # to every in-tree .mmco plugin as a POST_BUILD step.
+      #
+      # The signed payload is exactly the linker output; trailer layout
+      # is documented in launcher/plugin/MMCOFormat.h. Plugins without a
+      # signature are rejected at runtime unless their SPDX license is
+      # on the OSS allow-list.
+      #
+      # The same secrets feed AppImage signing (Linux package action),
+      # so importing here is additive: the package step re-imports as a
+      # no-op when the key is already present.
+      ##
+
+      - name: Import GPG signing key (POSIX)
+        id: gpg-import-posix
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PRIVATE_KEY_ID: ${{ secrets.GPG_PRIVATE_KEY_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GPG_PRIVATE_KEY:-}" ] || [ -z "${GPG_PRIVATE_KEY_ID:-}" ]; then
+            echo "GPG secrets not present — plugin signing will be skipped."
+            exit 0
+          fi
+          if ! command -v gpg >/dev/null 2>&1; then
+            echo "::warning::gpg not found on runner — plugin signing will be skipped"
+            exit 0
+          fi
+
+          # Use a dedicated GNUPGHOME so the import is isolated from any
+          # other tooling on the runner.
+          export GNUPGHOME="$RUNNER_TEMP/.gnupg-mmco"
+          mkdir -m 700 -p "$GNUPGHOME"
+
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          # Mark the imported key as ultimately trusted so detached-sign
+          # operations do not prompt for trust confirmation.
+          echo "${GPG_PRIVATE_KEY_ID}:6:" | gpg --batch --import-ownertrust
+
+          echo "MESHMC_PLUGIN_GPG_HOMEDIR=$GNUPGHOME" >> "$GITHUB_ENV"
+          echo "MESHMC_PLUGIN_GPG_KEY_ID=$GPG_PRIVATE_KEY_ID" >> "$GITHUB_ENV"
+
+      - name: Import GPG signing key (Windows)
+        id: gpg-import-windows
+        if: ${{ runner.os == 'Windows' }}
+        shell: bash
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PRIVATE_KEY_ID: ${{ secrets.GPG_PRIVATE_KEY_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GPG_PRIVATE_KEY:-}" ] || [ -z "${GPG_PRIVATE_KEY_ID:-}" ]; then
+            echo "GPG secrets not present — plugin signing will be skipped."
+            exit 0
+          fi
+
+          # GPG must be on PATH. windows-2022 / windows-11-arm ship gpg
+          # via Git for Windows; MSYS2 runners already have it.
+          if ! command -v gpg >/dev/null 2>&1; then
+            echo "::warning::gpg not found on Windows runner — plugin signing will be skipped"
+            exit 0
+          fi
+
+          # GNUPGHOME under a short path keeps Windows path-length quirks out.
+          GNUPGHOME_WIN="${RUNNER_TEMP}/gnupg-mmco"
+          mkdir -p "$GNUPGHOME_WIN"
+          export GNUPGHOME="$GNUPGHOME_WIN"
+
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "${GPG_PRIVATE_KEY_ID}:6:" | gpg --batch --import-ownertrust
+
+          # Translate to a Windows path so CMake / Python (which runs the
+          # signing script) can resolve it.
+          if command -v cygpath >/dev/null 2>&1; then
+            GNUPGHOME_WIN="$(cygpath -w "$GNUPGHOME_WIN")"
+          fi
+          echo "MESHMC_PLUGIN_GPG_HOMEDIR=$GNUPGHOME_WIN" >> "$GITHUB_ENV"
+          echo "MESHMC_PLUGIN_GPG_KEY_ID=$GPG_PRIVATE_KEY_ID" >> "$GITHUB_ENV"
+
       - name: Configure project
         working-directory: ${{ inputs.source-repository != '' && '.' || 'meshmc' }}
         run: |
-          cmake --preset "$CMAKE_PRESET"
+          # If a signing key was imported by the earlier step, ask
+          # MMCOSign.cmake to attach a GPG trailer to every in-tree
+          # plugin via POST_BUILD. Both env vars are exported in the
+          # gpg-import step; forks / PRs without secrets see them
+          # empty and skip signing.
+          EXTRA_FLAGS=()
+          if [ -n "${MESHMC_PLUGIN_GPG_KEY_ID:-}" ] && [ -n "${MESHMC_PLUGIN_GPG_HOMEDIR:-}" ]; then
+            EXTRA_FLAGS+=(
+              "-DMeshMC_PLUGIN_SIGN_ALL=ON"
+              "-DMeshMC_PLUGIN_SIGNING_KEY=${MESHMC_PLUGIN_GPG_KEY_ID}"
+              "-DMeshMC_PLUGIN_SIGNING_HOMEDIR=${MESHMC_PLUGIN_GPG_HOMEDIR}"
+            )
+            echo "Plugin signing: enabled (key ${MESHMC_PLUGIN_GPG_KEY_ID})"
+          else
+            echo "Plugin signing: disabled (no key configured)"
+          fi
+
+          cmake --preset "$CMAKE_PRESET" "${EXTRA_FLAGS[@]}"
 
       - name: Run build
         working-directory: ${{ inputs.source-repository != '' && '.' || 'meshmc' }}

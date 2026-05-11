@@ -40,10 +40,6 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
-    defaults:
-      run:
-        working-directory: meshmc
-
     steps:
       - name: Start log collector
         if: inputs.foreman-pipeline-id != ''

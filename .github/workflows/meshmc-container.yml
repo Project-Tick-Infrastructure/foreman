@@ -74,7 +74,7 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=raw,value=latest,enable=${{ github.event.merge_group.base_ref == 'refs/heads/develop' }}
+            type=raw,value=latest,enable=${{ github.event.merge_group.base_ref == 'refs/heads/master' }}
             type=sha
             type=sha,format=long
             type=ref,event=branch
@@ -85,7 +85,7 @@ jobs:
         uses: redhat-actions/buildah-build@v2
         with:
           containerfiles: |
-            ./meshmc/Containerfile
+            ./Containerfile
           tags: ${{ steps.image-metadata.outputs.tags }}
           labels: ${{ steps.image-metadata.outputs.labels }}
 
