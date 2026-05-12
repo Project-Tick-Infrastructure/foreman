@@ -102,9 +102,16 @@ runs:
       run: |
         set -euo pipefail
 
+        # aqt exports QT_ROOT_DIR (and sometimes Qt6_DIR). With
+        # `set -u` an unset Qt6_DIR would abort the step, so we
+        # access both via the `${var:-}` default-empty expansion.
+        qt_root_dir="${QT_ROOT_DIR:-}"
+        qt6_dir="${Qt6_DIR:-}"
         qmake6_bin=""
-        for candidate in "$QT_ROOT_DIR/bin/qmake6" "$Qt6_DIR/../../../bin/qmake6"; do
-          if [[ -x "$candidate" ]]; then
+        for candidate in \
+          "${qt_root_dir:+$qt_root_dir/bin/qmake6}" \
+          "${qt6_dir:+$qt6_dir/../../../bin/qmake6}"; do
+          if [[ -n "$candidate" && -x "$candidate" ]]; then
             qmake6_bin="$candidate"
             break
           fi
@@ -114,6 +121,7 @@ runs:
         fi
         if [[ -z "$qmake6_bin" ]]; then
           echo "::error::Could not locate qmake6 from the aqt-installed Qt."
+          echo "QT_ROOT_DIR=$qt_root_dir Qt6_DIR=$qt6_dir PATH=$PATH"
           exit 1
         fi
         echo "Using qmake6 at: $qmake6_bin"
