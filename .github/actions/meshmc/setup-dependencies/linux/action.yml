@@ -18,9 +18,10 @@ runs:
 
         sudo install -d -m 0755 /usr/share/keyrings
 
-        sudo gpg --no-default-keyring \
-          --keyring /usr/share/keyrings/gnupg-keyring.gpg \
-          --fetch-keys https://repos.gnupg.org/deb/gnupg/noble/gnupg-signing-key.gpg
+        curl -fsSL \
+          https://repos.gnupg.org/deb/gnupg/noble/gnupg-signing-key.gpg \
+          | gpg --dearmor \
+          | sudo tee /usr/share/keyrings/gnupg-keyring.gpg >/dev/null
 
         sudo chmod a+r /usr/share/keyrings/gnupg-keyring.gpg
 
