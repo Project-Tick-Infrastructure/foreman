@@ -44,7 +44,8 @@ runs:
           ninja-build extra-cmake-modules pkg-config scdoc \
           gamemode-dev libarchive-dev libqrencode-dev \
           libxcb-cursor-dev libtomlplusplus-dev libvulkan-dev \
-          libgpgme-dev libgpgmepp-dev libqgpgmeqt6-dev
+          libgpgme-dev=1.24.3-2 libgpgmepp-dev=1.24.3-2 \
+          libqgpgmeqt6-dev=1.24.3-2
 
     - name: Setup AppImage tooling
       shell: bash
