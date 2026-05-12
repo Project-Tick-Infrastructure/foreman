@@ -52,7 +52,7 @@ jobs:
           pipeline_id: ${{ inputs.foreman-pipeline-id }}
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name: ${{ github.job }}
-      - uses: Project-Tick-Infrastructure/checkout@v2
+      - uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - id: make
@@ -95,7 +95,7 @@ jobs:
           pipeline_id: ${{ inputs.foreman-pipeline-id }}
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name: ${{ github.job }}
-      - uses: Project-Tick-Infrastructure/checkout@v2
+      - uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
 

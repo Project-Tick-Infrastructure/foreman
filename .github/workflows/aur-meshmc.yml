@@ -25,7 +25,7 @@ jobs:
         run: pacman -Syu --noconfirm base-devel git openssh python curl
 
       - name: Checkout repository
-        uses: Project-Tick-Infrastructure/checkout@v2
+        uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
           show-progress: 'false'

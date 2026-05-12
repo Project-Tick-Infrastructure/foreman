@@ -51,7 +51,7 @@ jobs:
           job_name: ${{ github.job }}
       - name: install git
         run: apt-get install git
-      - uses: Project-Tick-Infrastructure/checkout@v2
+      - uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Get latest CMake and ninja
@@ -75,7 +75,7 @@ jobs:
           pipeline_id: ${{ inputs.foreman-pipeline-id }}
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name: ${{ github.job }}
-      - uses: Project-Tick-Infrastructure/checkout@v2
+      - uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Install Valgrind
@@ -104,7 +104,7 @@ jobs:
           job_name: ${{ github.job }}
       - name: Install dependencies
         run: apt-get update ; apt-get install -y git clang-tools iwyu unzip
-      - uses: Project-Tick-Infrastructure/checkout@v2
+      - uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Get latest CMake and ninja
@@ -129,7 +129,7 @@ jobs:
           pipeline_id: ${{ inputs.foreman-pipeline-id }}
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name: ${{ github.job }}
-      - uses: Project-Tick-Infrastructure/checkout@v2
+      - uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Get latest CMake and ninja
@@ -156,7 +156,7 @@ jobs:
           job_name: ${{ github.job }}
       - name: Install dependencies
         run: apt-get update ; apt-get install -y git clang-tools iwyu unzip
-      - uses: Project-Tick-Infrastructure/checkout@v2
+      - uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Get latest CMake and ninja
@@ -176,7 +176,7 @@ jobs:
           pipeline_id: ${{ inputs.foreman-pipeline-id }}
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name: ${{ github.job }}
-      - uses: Project-Tick-Infrastructure/checkout@v2
+      - uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Install dependencies
@@ -209,7 +209,7 @@ jobs:
           pipeline_id: ${{ inputs.foreman-pipeline-id }}
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name: ${{ github.job }}
-      - uses: Project-Tick-Infrastructure/checkout@v2
+      - uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Run CMake
@@ -231,7 +231,7 @@ jobs:
           pipeline_id: ${{ inputs.foreman-pipeline-id }}
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name: ${{ github.job }}
-      - uses: Project-Tick-Infrastructure/checkout@v2
+      - uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Run CMake

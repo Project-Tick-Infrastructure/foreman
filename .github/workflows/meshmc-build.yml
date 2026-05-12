@@ -140,7 +140,7 @@ jobs:
       ##
 
       - name: Checkout
-        uses: Project-Tick-Infrastructure/checkout@v2
+        uses: Project-Tick-Infrastructure/checkout@v5
         with:
           ref: ${{ inputs.source-ref || '' }}
           source-repository: ${{ inputs.source-repository || '' }}
