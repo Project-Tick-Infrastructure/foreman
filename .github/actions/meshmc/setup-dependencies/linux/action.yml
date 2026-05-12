@@ -13,6 +13,9 @@ runs:
     - name: Add GnuPG repository
       shell: bash
       run: |
+        sudo apt-get -y update
+        sudo apt-get -y install curl ca-certificates gnupg
+
         sudo install -d -m 0755 /usr/share/keyrings
 
         sudo gpg --no-default-keyring \
