@@ -75,46 +75,6 @@ runs:
           ENTITLEMENTS_FILE='../branding/AdhocSignedApp.entitlements'
           TIMESTAMP_FLAG=''
         fi
-
-        # Sign the bundle leaf-first.
-        #
-        # The previous incarnation of this step ran a single
-        #     codesign --deep --force --sign ... MeshMC.app/Contents/MacOS/meshmc
-        # which produced
-        #     "main executable failed strict validation
-        #      In subcomponent: .../mmcmodules/PackPortal.mmco"
-        # on every macOS build. Two reasons:
-        #   1. `--deep` is deprecated by Apple precisely because it
-        #      walks the bundle in an order that frequently leaves
-        #      seal hashes inconsistent with already-signed nested
-        #      Mach-Os. The plugin trailers we apply at CMake-install
-        #      time (mmco_sign_plugin / MMCOSign.cmake) further
-        #      perturb each .mmco's on-disk bytes after the outer
-        #      seal would have been computed.
-        #   2. The .mmco files live under Contents/MacOS/mmcmodules,
-        #      which Apple's signing tooling treats as bundle
-        #      subcomponents — so they MUST be signed in their own
-        #      right, leaf-first, before the parent executable is
-        #      sealed.
-        #
-        # Do them one by one in the correct order, without --deep.
-        # Entitlements are attached only to the main executable;
-        # plugins inherit the launcher's sandbox and giving them
-        # their own entitlement blob would itself break --strict.
-        echo "Signing bundled plugins (.mmco) under Contents/MacOS/mmcmodules"
-        if [ -d "MeshMC.app/Contents/MacOS/mmcmodules" ]; then
-          find "MeshMC.app/Contents/MacOS/mmcmodules" \
-               -type f -name "*.mmco" -print0 \
-            | while IFS= read -r -d '' _mmco; do
-                echo "  -> $_mmco"
-                sudo codesign --sign "$APPLE_CODESIGN_ID" --force \
-                              --options runtime $TIMESTAMP_FLAG \
-                              "$_mmco"
-              done
-        fi
-
-        # Any embedded dylibs / frameworks the build may have dropped
-        # into the bundle need the same leaf-first treatment.
         if [ -d "MeshMC.app/Contents/Frameworks" ]; then
           echo "Signing embedded frameworks / dylibs"
           find "MeshMC.app/Contents/Frameworks" \
@@ -126,6 +86,30 @@ runs:
                               "$_fw"
               done
         fi
+        if [ -d "MeshMC.app/Contents/MacOS/mmcmodules" ]; then
+          echo "::error::.mmco files found under Contents/MacOS/" \
+               "mmcmodules; they must install to Contents/PlugIns/" \
+               "mmcmodules on macOS. Check MMCO_MODULES_DEST_DIR in" \
+               "the top-level CMakeLists.txt."
+          ls -la "MeshMC.app/Contents/MacOS/mmcmodules" || true
+          exit 1
+        fi
+        echo "Signing helper executables under Contents/MacOS"
+        find "MeshMC.app/Contents/MacOS" -maxdepth 1 -type f -perm -u+x \
+             ! -name meshmc -print0 \
+          | while IFS= read -r -d '' _helper; do
+              # Skip anything that isn't a Mach-O image (shell
+              # scripts, plist fragments, etc.). `file -b` prints
+              # the format; we only care about Mach-O variants.
+              if file -b "$_helper" | grep -qE 'Mach-O|universal binary'; then
+                echo "  -> $_helper"
+                sudo codesign --sign "$APPLE_CODESIGN_ID" --force \
+                              --options runtime $TIMESTAMP_FLAG \
+                              "$_helper"
+              else
+                echo "  -- skipping non-Mach-O: $_helper"
+              fi
+            done
 
         # Main executable (with entitlements + hardened runtime).
         echo "Signing main executable"
@@ -133,19 +117,13 @@ runs:
                       --entitlements "$ENTITLEMENTS_FILE" \
                       --options runtime $TIMESTAMP_FLAG \
                       "MeshMC.app/Contents/MacOS/meshmc"
-
-        # Finally, seal the outer bundle so its CodeResources hash
-        # reflects every leaf we just signed.
         echo "Sealing outer bundle"
         sudo codesign --sign "$APPLE_CODESIGN_ID" --force \
                       --options runtime $TIMESTAMP_FLAG \
                       "MeshMC.app"
 
-        # Fail fast locally before we burn a notarytool round-trip
-        # on a bundle that we already know would be rejected. This
-        # is the exact check that surfaced the original regression.
-        echo "Verifying bundle signature (--strict --deep)"
-        sudo codesign --verify --verbose=2 --strict --deep "MeshMC.app"
+        echo "Verifying bundle signature (--strict)"
+        sudo codesign --verify --verbose=2 --strict "MeshMC.app"
 
     - name: Notarize
       shell: bash
