@@ -86,28 +86,70 @@ runs:
                               "$_fw"
               done
         fi
-        if [ -d "MeshMC.app/Contents/MacOS/mmcmodules" ]; then
-          echo "::error::.mmco files found under Contents/MacOS/" \
-               "mmcmodules; they must install to Contents/PlugIns/" \
-               "mmcmodules on macOS. Check MMCO_MODULES_DEST_DIR in" \
-               "the top-level CMakeLists.txt."
-          ls -la "MeshMC.app/Contents/MacOS/mmcmodules" || true
+        # Bundle-layout guard.
+        #
+        # Apple's signing tooling reserves Contents/MacOS/ for the
+        # main executable + its Mach-O helpers. Anything else found
+        # there (data files, JARs, directories of plugins) is treated
+        # as a subcomponent of the main executable and gets seal-
+        # hashed at strict-validation time. If such a subcomponent
+        # is not itself a signable Mach-O, the seal fails with e.g.
+        #     main executable failed strict validation
+        #       In subcomponent: .../mmcmodules/Foo.mmco
+        #     code object is not signed at all
+        #       In subcomponent: .../jars/JavaCheck.jar
+        # The right fix is structural, not whack-a-mole: keep
+        # Contents/MacOS/ Mach-O-only and route everything else into
+        # Resources/ (data) or PlugIns/ (loadable bundles). The CMake
+        # side of this commit does that for jars/ and mmcmodules/.
+        # This guard fails the build immediately if a future install
+        # rule slips through, so we never burn another notarytool
+        # round-trip on a layout regression.
+        echo "Validating Contents/MacOS/ layout"
+        _layout_bad=0
+        while IFS= read -r -d '' _entry; do
+          if [ -d "$_entry" ]; then
+            echo "::error::Unexpected directory under Contents/MacOS/: $_entry"
+            echo "          Move its contents to Resources/ or PlugIns/."
+            _layout_bad=1
+            continue
+          fi
+          if [ ! -f "$_entry" ]; then
+            continue
+          fi
+          if ! file -b "$_entry" | grep -qE 'Mach-O|universal binary'; then
+            echo "::error::Non-Mach-O file under Contents/MacOS/: $_entry"
+            echo "          file: $(file -b "$_entry")"
+            echo "          Move it to Contents/Resources/."
+            _layout_bad=1
+          fi
+        done < <(find "MeshMC.app/Contents/MacOS" -mindepth 1 -print0)
+        if [ "$_layout_bad" != "0" ]; then
+          echo "::error::Contents/MacOS/ layout check failed; aborting before codesign."
           exit 1
         fi
+
+        # Helper Mach-O executables under Contents/MacOS/ that aren't
+        # the main launcher (meshmc-updater, meshmc-crashreporter,
+        # ...). codesign treats each one as a subcomponent of the
+        # main executable and refuses to seal the parent unless the
+        # helper is already individually signed.
+        #
+        # We sign helpers with hardened runtime + timestamp but
+        # WITHOUT the launcher's entitlements file: helper binaries
+        # have their own (smaller) entitlement profiles, and giving
+        # them the launcher's blob would invite a separate
+        # notarization rejection. Special-case here if a helper
+        # ever needs its own entitlements.
         echo "Signing helper executables under Contents/MacOS"
-        find "MeshMC.app/Contents/MacOS" -maxdepth 1 -type f -perm -u+x \
+        find "MeshMC.app/Contents/MacOS" -maxdepth 1 -type f \
              ! -name meshmc -print0 \
           | while IFS= read -r -d '' _helper; do
-              # Skip anything that isn't a Mach-O image (shell
-              # scripts, plist fragments, etc.). `file -b` prints
-              # the format; we only care about Mach-O variants.
               if file -b "$_helper" | grep -qE 'Mach-O|universal binary'; then
                 echo "  -> $_helper"
                 sudo codesign --sign "$APPLE_CODESIGN_ID" --force \
                               --options runtime $TIMESTAMP_FLAG \
                               "$_helper"
-              else
-                echo "  -- skipping non-Mach-O: $_helper"
               fi
             done
 
