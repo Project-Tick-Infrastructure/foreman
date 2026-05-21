@@ -132,7 +132,7 @@ jobs:
           echo "immutable_tag=${ts}-r${GITHUB_RUN_ID}-a${GITHUB_RUN_ATTEMPT}-${short_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Build image
-        uses: docker/build-push-action@v7.1.0
+        uses: docker/build-push-action@v7.2.0
         with:
           context: ${{ inputs.source-repository != '' && '.' || 'images4docker' }}
           file: ${{ matrix.dockerfile }}
