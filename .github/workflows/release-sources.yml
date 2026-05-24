@@ -272,7 +272,23 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v8
 
+      - name: Check FTP credentials
+        id: ftp-check-meshmc
+        shell: bash
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_KEY: ${{ secrets.FTP_SSH_PRIVATE_KEY }}
+        run: |
+          if [[ -z "${FTP_HOST:-}" || -z "${FTP_USER:-}" || -z "${FTP_KEY:-}" ]]; then
+            echo "::warning::FTP credentials missing — skipping meshmc deploy."
+            echo "has_creds=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_creds=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Stage and deploy
+        if: steps.ftp-check-meshmc.outputs.has_creds == 'true'
         uses: Project-Tick/Project-Tick/.github/actions/deploy-release@master
         with:
           version: ${{ needs.resolve.outputs.version }}
@@ -404,7 +420,23 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v8
 
+      - name: Check FTP credentials
+        id: ftp-check-neozip
+        shell: bash
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_KEY: ${{ secrets.FTP_SSH_PRIVATE_KEY }}
+        run: |
+          if [[ -z "${FTP_HOST:-}" || -z "${FTP_USER:-}" || -z "${FTP_KEY:-}" ]]; then
+            echo "::warning::FTP credentials missing — skipping neozip deploy."
+            echo "has_creds=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_creds=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Stage and deploy
+        if: steps.ftp-check-neozip.outputs.has_creds == 'true'
         uses: Project-Tick/Project-Tick/.github/actions/deploy-release@master
         with:
           version: ${{ needs.resolve.outputs.version }}
@@ -544,6 +576,13 @@ jobs:
           REMOTE_BASE: /var/www/ftp/Project-Tick
         run: |
           set -euo pipefail
+
+          # FTP secret'ları yoksa deploy adımını sessizce atla.
+          if [[ -z "${FTP_HOST:-}" || -z "${FTP_USER:-}" || -z "${FTP_KEY:-}" ]]; then
+            echo "::warning::FTP credentials missing — skipping ${PRODUCT} ${VERSION} deploy."
+            exit 0
+          fi
+
           install -d -m 700 ~/.ssh
           printf '%s\n' "$FTP_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519

@@ -85,11 +85,16 @@ jobs:
             echo "Monorepo mode — neozip already in workspace"
             exit 0
           fi
+          # Public anonymous URL works without a token; when a token is
+          # set we keep the same URL and inject it as an http header so
+          # it never appears in the recorded remote.
           url="${GITLAB_BASE}/neozip.git"
           if [[ -n "$SOURCE_AUTH_TOKEN" ]]; then
-            url="https://${SOURCE_AUTH_USERNAME}:${SOURCE_AUTH_TOKEN}@${GITLAB_BASE#https://}/neozip.git"
+            git -c "http.extraHeader=PRIVATE-TOKEN: ${SOURCE_AUTH_TOKEN}" \
+              clone --depth 1 "$url" "${GITHUB_WORKSPACE}/neozip"
+          else
+            git clone --depth 1 "$url" "${GITHUB_WORKSPACE}/neozip"
           fi
-          git clone --depth 1 "$url" "${GITHUB_WORKSPACE}/neozip"
 
       - name: Build and install neozip (Linux)
         if: ${{ runner.os == 'Linux' }}

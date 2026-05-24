@@ -97,22 +97,40 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
+      - name: Check publish credentials
+        id: publish-creds
+        shell: bash
+        env:
+          MAVEN_USER: ${{ secrets.MAVEN_USERNAME }}
+          MAVEN_PASS: ${{ secrets.MAVEN_PASSWORD }}
+          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+        run: |
+          if [[ -z "${MAVEN_USER:-}" && -z "${MAVEN_PASS:-}" && -z "${GH_PACKAGES_TOKEN:-}" ]]; then
+            echo "::warning::No Gradle publish credentials configured — skipping publish."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: Project-Tick-Infrastructure/checkout@v5
+        if: steps.publish-creds.outputs.ready == 'true'
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Set up JDK
+        if: steps.publish-creds.outputs.ready == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: "temurin"
           java-version: "8"
           architecture: x64
       - name: Build with Gradle
+        if: steps.publish-creds.outputs.ready == 'true'
         env:
           IS_PUBLICATION: true
         run: |
           chmod +x ./gradlew
           ./gradlew publish -iS
       - uses: actions/upload-artifact@v7
+        if: steps.publish-creds.outputs.ready == 'true'
         with:
           name: ForgeWrapper-Release
           path: ${{ inputs.source-repository != '' && 'build/libs' || 'forgewrapper/build/libs' }}

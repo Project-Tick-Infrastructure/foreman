@@ -120,8 +120,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          UPSTREAM_SHA="$(gh api /repos/Project-Tick/Project-Tick/branches/master --jq '.commit.sha')"
-          echo "VERSION=${UPSTREAM_SHA::7}" >> "$GITHUB_ENV"
+          if UPSTREAM_SHA="$(gh api /repos/Project-Tick/Project-Tick/branches/master --jq '.commit.sha' 2>/dev/null)" && [[ -n "$UPSTREAM_SHA" ]]; then
+            echo "VERSION=${UPSTREAM_SHA::7}" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Unable to query upstream Project-Tick/master; falling back to local SHA."
+            echo "VERSION=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          fi
 
       - name: Restore local repository
         id: restore-repository

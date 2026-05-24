@@ -169,8 +169,6 @@ jobs:
           SOURCE_AUTH_USERNAME: ${{ vars.PT_GITLAB_SOURCE_USERNAME || 'oauth2' }}
         run: |
           set -euo pipefail
-          # In polyrepo mode, clone each dependency from GitLab.
-          # In monorepo mode, they already exist in the workspace.
           if [[ -z "$SOURCE_REPOSITORY" ]]; then
             echo "Monorepo mode — dependencies already in workspace"
             exit 0
@@ -181,13 +179,20 @@ jobs:
                 ganalytics rainbow iconfix LocalPeer classparser katabasis
                 javacheck javalauncher)
 
+          # The Project-Tick GitLab projects are public, so the canonical
+          # anonymous URL works whether secrets are present or not. When
+          # PT_GITLAB_SOURCE_TOKEN *is* set we still use the same path —
+          # but pass the token via http.extraHeader so it never leaks
+          # into the recorded remote URL or `git log` output.
           for dep in "${DEPS[@]}"; do
             url="${GITLAB_BASE}/${dep}.git"
-            if [[ -n "$SOURCE_AUTH_TOKEN" ]]; then
-              url="https://${SOURCE_AUTH_USERNAME}:${SOURCE_AUTH_TOKEN}@${GITLAB_BASE#https://}/projects/${dep}.git"
-            fi
             echo "::group::Cloning $dep"
-            git clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
+            if [[ -n "$SOURCE_AUTH_TOKEN" ]]; then
+              git -c "http.extraHeader=PRIVATE-TOKEN: ${SOURCE_AUTH_TOKEN}" \
+                clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
+            else
+              git clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
+            fi
             echo "::endgroup::"
           done
 
@@ -195,6 +200,7 @@ jobs:
         if: ${{ runner.os == 'Linux' }}
         shell: bash
         run: |
+          set -euo pipefail
           MONOREPO_ROOT="${GITHUB_WORKSPACE}"
           CMAKE_COMMON="-DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release"
 
@@ -243,13 +249,18 @@ jobs:
           DEPS=(neozip cmark tomlplusplus libnbtplusplus optional-bare xz-embedded
                 systeminfo ganalytics rainbow iconfix LocalPeer classparser katabasis
                 javacheck javalauncher)
+          # Project-Tick GitLab projects are public; same canonical URL
+          # whether SOURCE_AUTH_TOKEN is set or not. When set, the token
+          # is injected as an http header so it never lands in the remote.
           for dep in "${DEPS[@]}"; do
             url="${GITLAB_BASE}/${dep}.git"
-            if [[ -n "$SOURCE_AUTH_TOKEN" ]]; then
-              url="https://${SOURCE_AUTH_USERNAME}:${SOURCE_AUTH_TOKEN}@${GITLAB_BASE#https://}/projects/${dep}.git"
-            fi
             echo "::group::Cloning $dep"
-            git clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
+            if [[ -n "$SOURCE_AUTH_TOKEN" ]]; then
+              git -c "http.extraHeader=PRIVATE-TOKEN: ${SOURCE_AUTH_TOKEN}" \
+                clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
+            else
+              git clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
+            fi
             echo "::endgroup::"
           done
 
@@ -311,9 +322,11 @@ jobs:
           for dep in "${DEPS[@]}"; do
             url="${GITLAB_BASE}/${dep}.git"
             if [[ -n "$SOURCE_AUTH_TOKEN" ]]; then
-              url="https://${SOURCE_AUTH_USERNAME}:${SOURCE_AUTH_TOKEN}@${GITLAB_BASE#https://}/projects/${dep}.git"
+              git -c "http.extraHeader=PRIVATE-TOKEN: ${SOURCE_AUTH_TOKEN}" \
+                clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
+            else
+              git clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
             fi
-            git clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
           done
 
       - name: Build and install dependencies (Windows MinGW)
@@ -364,9 +377,11 @@ jobs:
           for dep in "${DEPS[@]}"; do
             url="${GITLAB_BASE}/${dep}.git"
             if [[ -n "$SOURCE_AUTH_TOKEN" ]]; then
-              url="https://${SOURCE_AUTH_USERNAME}:${SOURCE_AUTH_TOKEN}@${GITLAB_BASE#https://}/projects/${dep}.git"
+              git -c "http.extraHeader=PRIVATE-TOKEN: ${SOURCE_AUTH_TOKEN}" \
+                clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
+            else
+              git clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
             fi
-            git clone --depth 1 "$url" "${GITHUB_WORKSPACE}/${dep}"
           done
 
       - name: Build and install dependencies (Windows MSVC)

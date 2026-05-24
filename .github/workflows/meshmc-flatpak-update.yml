@@ -93,24 +93,40 @@ jobs:
       run:
         working-directory: meshmc/flatpak
     steps:
+      - name: Check FLATPAK_PAT_TOKEN credential
+        id: creds
+        shell: bash
+        env:
+          FLATPAK_PAT_TOKEN: ${{ secrets.FLATPAK_PAT_TOKEN }}
+        run: |
+          if [[ -z "${FLATPAK_PAT_TOKEN:-}" ]]; then
+            echo "::warning::FLATPAK_PAT_TOKEN is not set — flatpak module update will be skipped."
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Start log collector
-        if: inputs.foreman-pipeline-id != ''
+        if: inputs.foreman-pipeline-id != '' && steps.creds.outputs.has_token == 'true'
         uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
         with:
           pipeline_id: ${{ inputs.foreman-pipeline-id }}
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name: ${{ github.job }}
       - name: Checkout repository
+        if: steps.creds.outputs.has_token == 'true'
         uses: actions/checkout@v6.0.2
         with:
           token: ${{ secrets.FLATPAK_PAT_TOKEN }}
 
       - name: Run update
+        if: steps.creds.outputs.has_token == 'true'
         uses: docker://ghcr.io/flathub/flatpak-external-data-checker:latest
         with:
           args: --update --edit-only meshmc/flatpak/org.projecttick.MeshMC.yml
 
       - name: Create Pull request
+        if: steps.creds.outputs.has_token == 'true'
         id: pull-request
         uses: peter-evans/create-pull-request@v8
         with:

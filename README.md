@@ -92,6 +92,31 @@ the same workflow file works for:
 - Manual dispatch by a maintainer (headless unless they pass
   `callback_url` / `callback_token` directly).
 
+## Secret-less execution guarantees
+
+Every workflow in this repository is designed to **never fail a build
+just because a secret is missing**. The contract is:
+
+- **Foreman callbacks** (`FOREMAN_API_TOKEN`, `foreman-callback-*`):
+  missing → wrappers no-op, gate falls back to a permissive local
+  plan, status callbacks log a warning.
+- **Deploy / publish credentials** (`FTP_*`, `AUR_SSH_PRIVATE_KEY`,
+  `FLATPAK_*`, `CACHIX_AUTH_TOKEN`, `PPM_REGISTRY_SIGNING_KEY`,
+  Maven/Gradle publish): missing → the specific publish step is
+  guarded with `if: steps.creds.outputs.has_key == 'true'` and skipped
+  with a `::warning::`. The job still reports `success`.
+- **Code-signing credentials** (`GPG_PRIVATE_KEY`, `APPLE_CODESIGN_*`,
+  `WINDOWS_CODESIGN_*`, `SPARKLE_ED25519_KEY`): handled by the
+  per-platform package composite actions, which fall back to unsigned
+  artifacts and surface a notice.
+- **Optional polyrepo source clone token** (`PT_GITLAB_SOURCE_TOKEN`):
+  missing → unauthenticated clone is attempted, which works for public
+  upstream GitLab projects.
+
+In other words: a fresh fork of this repository, with **zero secrets
+configured**, can clone, run `ci.yml`, and finish with a green
+verdict on the build/test stages.
+
 ## Composite action reference
 
 | Action                            | Used by                  | Purpose                                                                 |

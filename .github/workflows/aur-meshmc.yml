@@ -18,13 +18,31 @@ jobs:
     name: Update AUR Package
     runs-on: ubuntu-latest
     container: archlinux:latest
+    # AUR yayını AUR_SSH_PRIVATE_KEY zorunlu. Secret yoksa
+    # job tamamen skip — workflow yine de "success" olur.
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.AUR_DEPLOY_ENABLED == 'true' || github.event_name == 'release' }}
     permissions:
       contents: write
     steps:
+      - name: Check AUR deploy credentials
+        id: creds
+        shell: bash
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [[ -z "${AUR_SSH_PRIVATE_KEY:-}" ]]; then
+            echo "::warning::AUR_SSH_PRIVATE_KEY is not set — AUR deploy will be skipped."
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install dependencies
+        if: steps.creds.outputs.has_key == 'true'
         run: pacman -Syu --noconfirm base-devel git openssh python curl
 
       - name: Checkout repository
+        if: steps.creds.outputs.has_key == 'true'
         uses: Project-Tick-Infrastructure/checkout@v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
@@ -32,11 +50,13 @@ jobs:
           ref: ${{ github.event.repository.default_branch || 'master' }}
 
       - name: Set release tag
+        if: steps.creds.outputs.has_key == 'true'
         run: |
           TAG="${{ inputs.tag || github.event.release.tag_name }}"
           echo "TAG=${TAG}" >> "$GITHUB_ENV"
 
       - name: Extract MeshMC version
+        if: steps.creds.outputs.has_key == 'true'
         shell: bash
         run: |
           MAJOR=$(grep 'set(MeshMC_VERSION_MAJOR' CMakeLists.txt | sed 's/[^0-9]//g')
@@ -45,6 +65,7 @@ jobs:
           echo "PKGVER=${MAJOR}.${MINOR}.${HOTFIX}" >> "$GITHUB_ENV"
 
       - name: Download tarball and compute b2sum
+        if: steps.creds.outputs.has_key == 'true'
         shell: bash
         run: |
           TARBALL_URL="https://ftp.projecttick.org/Project-Tick/meshmc/releases/download/${TAG}/meshmc-${TAG}.tar.gz"
@@ -54,6 +75,7 @@ jobs:
           rm /tmp/meshmc-tarball.tar.gz
 
       - name: Update PKGBUILD
+        if: steps.creds.outputs.has_key == 'true'
         shell: bash
         working-directory: Packaging/os-specific/linux/distro-specific/pacman
         run: |
@@ -86,6 +108,7 @@ jobs:
           grep -A4 '^b2sums' PKGBUILD
 
       - name: Generate .SRCINFO
+        if: steps.creds.outputs.has_key == 'true'
         working-directory: Packaging/os-specific/linux/distro-specific/pacman
         run: |
           useradd -m builder
@@ -93,6 +116,7 @@ jobs:
           su builder -c "makepkg --printsrcinfo > .SRCINFO"
 
       - name: Deploy to AUR
+        if: steps.creds.outputs.has_key == 'true'
         working-directory: Packaging/os-specific/linux/distro-specific/pacman
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}

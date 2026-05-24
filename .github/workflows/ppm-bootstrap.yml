@@ -1,0 +1,392 @@
+# Copyright (C) Project Tick
+# SPDX-License-Identifier: MIT
+#
+# ppm: bootstrap & publish stage-1 tools.
+#
+# This workflow exercises the maintainer-side bootstrap pipeline that
+# lives in `project-tick/ppm/tools/`. On every dispatch (or when called
+# by Foreman) it:
+#
+#   1. Checks out the ppm sources via Project-Tick-Infrastructure/checkout.
+#   2. Builds the autotools project and runs `make check` to prove the
+#      working tree is healthy before we bake anything trusted.
+#   3. Produces a deterministic `bootstrap-tools` seed tarball
+#      (`tools/make-bootstrap-tools.sh`).
+#   4. Generates `musl-stage1` and `llvm-stage1` registry manifests
+#      (`tools/make-stage1-manifests.sh`).
+#   5. Signs every manifest with the registry signing key stored in
+#      `secrets.PPM_REGISTRY_SIGNING_KEY` (hex-encoded 64-byte
+#      Ed25519 secret key — matches what `tools/ppm-keygen.sh`
+#      writes to `<name>.sk.hex`).
+#   6. rsyncs the resulting tarball + registry skeleton to
+#      ftp.projecttick.org over SSH.
+#
+# The workflow is Foreman-aware via the canonical job-wrapper /
+# job-finalize actions. When run outside Foreman (a manual
+# workflow_dispatch by a maintainer) the wrappers silently no-op the
+# callbacks, the build still proceeds, and the FTP step still
+# publishes — there is intentionally no `--dry-run` guard, because
+# publishing a freshly-signed seed is exactly the point of this
+# workflow. Anyone with the secrets can ship a release.
+
+name: "ppm: bootstrap & publish"
+
+on:
+  workflow_dispatch:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+      seed-version:
+        description: bootstrap-tools version stamp.
+        type: string
+        default: "0.1.0"
+      target-system:
+        description: Target system tag, e.g. x86_64-linux.
+        type: string
+        default: "x86_64-linux"
+      publish:
+        description: Upload artefacts to ftp.projecttick.org.
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      source-repository:
+        description: Source repository URL (GitLab).
+        type: string
+        default: ""
+      seed-version:
+        type: string
+        default: "0.1.0"
+      target-system:
+        type: string
+        default: "x86_64-linux"
+      publish:
+        type: boolean
+        default: true
+      foreman-pipeline-id:
+        description: Foreman pipeline ID for log streaming.
+        type: string
+        default: ""
+      foreman-plan:
+        description: Compact JSON plan returned by Foreman gate.
+        type: string
+        default: ""
+      foreman-callback-url:
+        description: Foreman callback base URL for this pipeline.
+        type: string
+        default: ""
+      foreman-callback-token:
+        description: Foreman callback bearer token for this pipeline.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: build & publish stage-1 bootstrap
+    runs-on: ubuntu-latest
+
+    # The `ppm/` subdirectory layout is identical whether we checked
+    # out the upstream GitLab tree (via source-repository) or are
+    # running on a mirror that already has `ppm/` at the top level.
+    # The custom checkout action handles both cases for us; we just
+    # cd into ppm/ for every shell step.
+    defaults:
+      run:
+        working-directory: ppm
+
+    steps:
+      - name: Foreman job init
+        id: foreman
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        with:
+          callback_url:      ${{ inputs.foreman-callback-url }}
+          callback_token:    ${{ inputs.foreman-callback-token }}
+          pipeline_id:       ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name:          ${{ github.job }}
+          plan_json:         ${{ inputs.foreman-plan }}
+
+      - name: Checkout
+        uses: Project-Tick-Infrastructure/checkout@v5
+        with:
+          source-repository: ${{ inputs.source-repository || '' }}
+
+      # ----------------------------------------------------------------
+      # Host toolchain for the maintainer scripts. Everything below is
+      # ordinary Ubuntu packages; we are NOT yet building ppm-the-tool
+      # against musl, that comes later in the chain.
+      # ----------------------------------------------------------------
+      - name: Install host toolchain
+        working-directory: .
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            autoconf automake libtool pkg-config m4 \
+            libcurl4-openssl-dev \
+            libarchive-dev \
+            libsodium-dev \
+            libgit2-dev \
+            scdoc \
+            zstd \
+            rsync \
+            openssh-client \
+            ca-certificates
+
+      # ----------------------------------------------------------------
+      # Sanity build: refuse to publish a seed produced by a tree whose
+      # own test suite does not pass. `make check` exercises the SHA-512,
+      # signature, manifest, store, transaction, resolver, and build-
+      # chain tests under ASan + UBSan.
+      # ----------------------------------------------------------------
+      - name: Bootstrap autotools
+        run: ./bootstrap.sh
+
+      - name: Configure (debug + sanitizers)
+        run: |
+          ./configure \
+            --enable-debug \
+            --enable-asan \
+            --enable-ubsan
+
+      - name: Build
+        run: make -j"$(nproc)"
+
+      - name: Test
+        run: make -j"$(nproc)" check
+
+      # ----------------------------------------------------------------
+      # Stage-1 artefacts.
+      #
+      # The seed and manifests are produced in $RUNNER_TEMP/ppm-release
+      # so they survive across steps and never collide with the source
+      # tree. SOURCE_DATE_EPOCH is pinned to the workflow's commit time
+      # so identical inputs at the same revision yield byte-identical
+      # outputs across re-runs.
+      # ----------------------------------------------------------------
+      - name: Resolve deterministic SOURCE_DATE_EPOCH
+        id: sde
+        run: |
+          set -eu
+          ts=$(git log -1 --pretty=%ct)
+          echo "value=$ts" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_DATE_EPOCH=$ts"
+
+      - name: Load signing key
+        id: signing-key
+        env:
+          PPM_SIGNING_KEY: ${{ secrets.PPM_REGISTRY_SIGNING_KEY }}
+        run: |
+          set -eu
+          if [ -z "${PPM_SIGNING_KEY:-}" ]; then
+            echo "::warning::PPM_REGISTRY_SIGNING_KEY missing — seed/manifest signing"
+            echo "::warning::and FTP publish will be skipped. Build + tests still run."
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          umask 077
+          install -d -m 700 "$RUNNER_TEMP/ppm-keys"
+          printf '%s\n' "$PPM_SIGNING_KEY" > "$RUNNER_TEMP/ppm-keys/ci.sk.hex"
+          chmod 600 "$RUNNER_TEMP/ppm-keys/ci.sk.hex"
+          # Sanity-check shape early.
+          len=$(tr -d ' \t\n\r' < "$RUNNER_TEMP/ppm-keys/ci.sk.hex" | wc -c)
+          if [ "$len" -ne 128 ]; then
+            echo "::warning::signing key must be 128 hex chars; got $len — skipping signed steps"
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has_key=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build bootstrap-tools seed
+        if: steps.signing-key.outputs.has_key == 'true'
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.sde.outputs.value }}
+        run: |
+          set -eux
+          ./tools/make-bootstrap-tools.sh \
+            -o "$RUNNER_TEMP/ppm-release" \
+            -V "${{ inputs.seed-version }}" \
+            -s "${{ inputs.target-system }}" \
+            --sign-with "$RUNNER_TEMP/ppm-keys/ci.sk.hex" \
+            --signer-id projecttick
+
+      - name: Generate stage-1 manifests
+        if: steps.signing-key.outputs.has_key == 'true'
+        run: |
+          set -eux
+          ./tools/make-stage1-manifests.sh \
+            -o "$RUNNER_TEMP/ppm-release/registry-skeleton" \
+            --sign-with "$RUNNER_TEMP/ppm-keys/ci.sk.hex" \
+            --signer-id projecttick
+
+      # ----------------------------------------------------------------
+      # Verify every signature locally before we hand anything to FTP.
+      # The verifier is a self-contained 60-line libsodium C program;
+      # building it on the runner takes ~1s and adds no new dependency.
+      # ----------------------------------------------------------------
+      - name: Verify all manifest signatures
+        if: steps.signing-key.outputs.has_key == 'true'
+        run: |
+          set -eu
+          cat > "$RUNNER_TEMP/verify.c" <<'CCODE'
+          /* SPDX-License-Identifier: GPL-2.0-only */
+          #include <sodium.h>
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          static int h2b(const char *h, unsigned char *o, size_t n){
+              if (strlen(h) != n*2) return -1;
+              for (size_t i=0;i<n;i++){ unsigned b;
+                  if(sscanf(h+2*i,"%2x",&b)!=1)return -1; o[i]=(unsigned char)b;}
+              return 0;
+          }
+          static int rd(const char *p, unsigned char **b, size_t *n){
+              FILE *f=fopen(p,"rb"); if(!f) return -1;
+              fseek(f,0,SEEK_END); long s=ftell(f); rewind(f);
+              *b=malloc((size_t)s); if(!*b){fclose(f);return -1;}
+              if (fread(*b,1,(size_t)s,f)!=(size_t)s){free(*b);fclose(f);return -1;}
+              fclose(f); *n=(size_t)s; return 0;
+          }
+          int main(int argc,char**argv){
+              if(argc!=4) return 2;
+              if(sodium_init()<0) return 3;
+              unsigned char *pkh=NULL,*sh=NULL,*m=NULL; size_t pl=0,sl=0,ml=0;
+              if(rd(argv[1],&pkh,&pl)) return 4;
+              while(pl && (pkh[pl-1]=='\n'||pkh[pl-1]=='\r'||pkh[pl-1]==' '||pkh[pl-1]=='\t')) pl--;
+              pkh[pl]=0;
+              if(rd(argv[2],&m,&ml)) return 5;
+              if(rd(argv[3],&sh,&sl)) return 6;
+              while(sl && (sh[sl-1]=='\n'||sh[sl-1]=='\r'||sh[sl-1]==' '||sh[sl-1]=='\t')) sl--;
+              sh[sl]=0;
+              unsigned char pk[crypto_sign_PUBLICKEYBYTES], sig[crypto_sign_BYTES];
+              if(h2b((char*)pkh,pk,sizeof(pk))) return 7;
+              if(h2b((char*)sh,sig,sizeof(sig))) return 8;
+              return crypto_sign_verify_detached(sig,m,ml,pk)==0 ? 0 : 9;
+          }
+          CCODE
+          cc $(pkg-config --cflags libsodium) -O2 \
+              -o "$RUNNER_TEMP/verify" "$RUNNER_TEMP/verify.c" \
+              $(pkg-config --libs libsodium)
+
+          SKEL="$RUNNER_TEMP/ppm-release/registry-skeleton"
+          PUB="$SKEL/signers/projecttick.pub"
+          [ -f "$PUB" ] || { echo "::error::signer pub missing: $PUB"; exit 1; }
+
+          rc=0
+          for sig in $(find "$SKEL" -name 'manifest.toml.sig' | sort); do
+              man="${sig%.sig}"
+              printf 'verify: %s ' "${man#"$SKEL/"}"
+              if "$RUNNER_TEMP/verify" "$PUB" "$man" "$sig"; then
+                  echo OK
+              else
+                  echo "::error::signature verification failed for $man"
+                  rc=1
+              fi
+          done
+          exit "$rc"
+
+      # ----------------------------------------------------------------
+      # Upload artefacts to the workflow so they are inspectable from
+      # the run page even when --publish=false.
+      # ----------------------------------------------------------------
+      - name: Upload artefacts
+        if: steps.signing-key.outputs.has_key == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ppm-bootstrap-${{ inputs.seed-version }}-${{ inputs.target-system }}
+          path: |
+            ${{ runner.temp }}/ppm-release/bootstrap-tools-*.tar.zst
+            ${{ runner.temp }}/ppm-release/bootstrap-tools-*.tar.zst.sha512
+            ${{ runner.temp }}/ppm-release/registry-skeleton
+          if-no-files-found: error
+          retention-days: 30
+
+      # ----------------------------------------------------------------
+      # Publish to ftp.projecttick.org via SSH + rsync.
+      #
+      # Two destinations:
+      #   * the tarball lands under  Project-Tick/bootstrap-tools/
+      #     to match the URL embedded in the bootstrap-tools manifest's
+      #     [source].url.
+      #   * the registry-skeleton/ tree is staged under
+      #     Project-Tick/ppm-registry-staging/<commit-sha>/ so a
+      #     maintainer can rsync-merge it into the ppm-pkgs git
+      #     checkout without overwriting unrelated packages.
+      # ----------------------------------------------------------------
+      - name: Prepare SSH credentials
+        id: ftp-creds
+        if: ${{ inputs.publish && steps.signing-key.outputs.has_key == 'true' }}
+        working-directory: .
+        env:
+          FTP_KEY:  ${{ secrets.FTP_SSH_PRIVATE_KEY }}
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_PORT: ${{ secrets.FTP_SSH_PORT || '22' }}
+        run: |
+          set -eu
+          if [ -z "${FTP_KEY:-}" ] || [ -z "${FTP_HOST:-}" ]; then
+              echo "::warning::publish=true but FTP_HOST / FTP_SSH_PRIVATE_KEY are not set — skipping publish."
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$FTP_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keyscan -p "$FTP_PORT" -H "$FTP_HOST" >> "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to ftp.projecttick.org
+        if: ${{ inputs.publish && steps.signing-key.outputs.has_key == 'true' && steps.ftp-creds.outputs.ready == 'true' }}
+        working-directory: .
+        env:
+          FTP_HOST:    ${{ secrets.FTP_HOST }}
+          FTP_USER:    ${{ secrets.FTP_USER }}
+          FTP_PORT:    ${{ secrets.FTP_SSH_PORT || '22' }}
+          REMOTE_BASE: ${{ secrets.FTP_REMOTE_BASE || '/var/www/ftp/Project-Tick' }}
+          SEED_VER:    ${{ inputs.seed-version }}
+          SYSTEM:      ${{ inputs.target-system }}
+          COMMIT:      ${{ github.sha }}
+        run: |
+          set -eux
+          SKEL="$RUNNER_TEMP/ppm-release/registry-skeleton"
+          TAR="$RUNNER_TEMP/ppm-release/bootstrap-tools-${SEED_VER}-${SYSTEM}.tar.zst"
+
+          tarball_dst="${REMOTE_BASE}/bootstrap-tools"
+          registry_dst="${REMOTE_BASE}/ppm-registry-staging/${COMMIT}"
+
+          ssh -p "$FTP_PORT" "$FTP_USER@$FTP_HOST" \
+              "mkdir -p '${tarball_dst}' '${registry_dst}'"
+
+          # Tarball + its .sha512 sidecar.
+          rsync -av --chmod=D755,F644 \
+              -e "ssh -p ${FTP_PORT} -o StrictHostKeyChecking=yes" \
+              "$TAR" "${TAR}.sha512" \
+              "${FTP_USER}@${FTP_HOST}:${tarball_dst}/"
+
+          # Whole registry skeleton (versions.toml, manifests, sigs,
+          # signers). Trailing slash on source so we drop CONTENTS into
+          # the staging dir, not the directory itself.
+          rsync -av --chmod=D755,F644 \
+              -e "ssh -p ${FTP_PORT} -o StrictHostKeyChecking=yes" \
+              "${SKEL}/" \
+              "${FTP_USER}@${FTP_HOST}:${registry_dst}/"
+
+          echo "::notice::Published bootstrap-tools ${SEED_VER} (${SYSTEM})"
+          echo "::notice::Registry skeleton staged at ${registry_dst}"
+
+      - name: Foreman job finalize
+        if: always()
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        with:
+          callback_url:      ${{ inputs.foreman-callback-url }}
+          callback_token:    ${{ inputs.foreman-callback-token }}
+          pipeline_id:       ${{ inputs.foreman-pipeline-id }}
+          foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
+          job_name:          ${{ github.job }}
+          job_status:        ${{ job.status }}

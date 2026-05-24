@@ -111,41 +111,56 @@ jobs:
       SOURCE_REPOSITORY: ${{ needs.build.outputs.repository-directory }}
 
     steps:
+      - name: Validate deployment configuration
+        id: validate
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          missing=0
+          if [[ -z "$DEPLOY_REPOSITORY" ]]; then
+            echo "::warning::Missing repository variable FLATPAK_DEPLOY_REPOSITORY (SSH URL of the target deployment repository)."
+            missing=1
+          fi
+
+          if [[ -z "$DEPLOY_SSH_PRIVATE_KEY" ]]; then
+            echo "::warning::Missing secret FLATPAK_DEPLOY_SSH_PRIVATE_KEY. You can also reuse FTP_SSH_PRIVATE_KEY."
+            missing=1
+          fi
+
+          if [[ "$missing" -eq 1 ]]; then
+            echo "::notice::Flatpak deploy will be skipped because deploy credentials are not configured."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Start log collector
-        if: inputs.foreman-pipeline-id != ''
+        if: inputs.foreman-pipeline-id != '' && steps.validate.outputs.configured == 'true'
         uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
         with:
           pipeline_id: ${{ inputs.foreman-pipeline-id }}
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name: ${{ github.job }}
       - name: Restore local repository
+        if: steps.validate.outputs.configured == 'true'
         uses: actions/cache/restore@v5
         with:
           path: ${{ env.SOURCE_REPOSITORY }}
           key: ${{ needs.build.outputs.repository-cache-key }}
           fail-on-cache-miss: true
 
-      - name: Validate deployment configuration
+      - name: Check restored repository directory
+        if: steps.validate.outputs.configured == 'true'
         shell: bash
         run: |
-          set -euo pipefail
-
-          if [[ -z "$DEPLOY_REPOSITORY" ]]; then
-            echo "::error::Missing repository variable FLATPAK_DEPLOY_REPOSITORY (SSH URL of the target deployment repository)."
-            exit 1
-          fi
-
-          if [[ -z "$DEPLOY_SSH_PRIVATE_KEY" ]]; then
-            echo "::error::Missing secret FLATPAK_DEPLOY_SSH_PRIVATE_KEY. You can also reuse FTP_SSH_PRIVATE_KEY."
-            exit 1
-          fi
-
           if [[ ! -d "$GITHUB_WORKSPACE/$SOURCE_REPOSITORY" ]]; then
-            echo "::error::Flatpak repository directory was not restored: $GITHUB_WORKSPACE/$SOURCE_REPOSITORY"
-            exit 1
+            echo "::warning::Flatpak repository directory was not restored: $GITHUB_WORKSPACE/$SOURCE_REPOSITORY"
+            echo "DEPLOY_SKIP=true" >> "$GITHUB_ENV"
           fi
 
       - name: Prepare SSH credentials
+        if: steps.validate.outputs.configured == 'true' && env.DEPLOY_SKIP != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -165,12 +180,14 @@ jobs:
           chmod 600 ~/.ssh/config
 
       - name: Configure git identity
+        if: steps.validate.outputs.configured == 'true' && env.DEPLOY_SKIP != 'true'
         shell: bash
         run: |
           git config --global user.name "$DEPLOY_GIT_NAME"
           git config --global user.email "$DEPLOY_GIT_EMAIL"
 
       - name: Push repository contents
+        if: steps.validate.outputs.configured == 'true' && env.DEPLOY_SKIP != 'true'
         shell: bash
         run: |
           set -euo pipefail

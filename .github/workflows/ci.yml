@@ -277,14 +277,15 @@ jobs:
           curl \
             --silent \
             --show-error \
-            --fail \
             --retry 3 \
             --retry-all-errors \
+            --max-time 15 \
             --request POST \
             --header "Authorization: Bearer $CALLBACK_TOKEN" \
             --header "Content-Type: application/json" \
             --data "$payload" \
-            "${CALLBACK_URL%/}/log_url"
+            "${CALLBACK_URL%/}/log_url" \
+            || echo "::warning::log_url callback failed (non-fatal)"
 
   # ╔════════════════════════════════════════════════════════════════╗
   # ║  STAGE 0 — Gate & Triage                                       ║
@@ -364,22 +365,49 @@ jobs:
 
           plan_file="$(mktemp)"
 
+          emit_fallback_plan() {
+            local reason="$1"
+            echo "::notice::Foreman plan unavailable ($reason); emitting permissive local fallback."
+            # Build the fallback plan programmatically with jq so we
+            # avoid heredoc indentation pitfalls and guarantee valid JSON.
+            jq -nc '{
+              run_level: "standard",
+              changed_projects: "",
+              build_type: "Debug",
+              jobs: {
+                lint: true,
+                mnv: true, cgit: true, cmark: true, corebinutils: true,
+                genqrcode: true, neozip: true, json4cpp: true,
+                libnbtplusplus: true, tomlplusplus: true,
+                meshmc: true, forgewrapper: true, imagesplusplus: true,
+                cmark_fuzz: false, json4cpp_fuzz: false,
+                json4cpp_amalgam: false, tomlplusplus_fuzz: false,
+                neozip_fuzz: false, mnv_codeql: false, neozip_codeql: false,
+                meshmc_container: false, meshmc_nix: false,
+                "foreman-20": false, release_sources: false,
+                beta_source_only: false
+              },
+              quarantined_tests: [],
+              cost_aware: { downgrade: false, reason: "no_foreman" },
+              cache_prediction: { predicted_miss: false }
+            }' > "$plan_file"
+          }
+
           if [[ -n "$PIPELINE_ID" && -n "$CALLBACK_TOKEN" ]]; then
-            curl \
+            if ! curl \
               --silent \
               --show-error \
-              --fail \
               --retry 3 \
               --retry-all-errors \
+              --max-time 30 \
               --header "Authorization: Bearer $CALLBACK_TOKEN" \
               "${FOREMAN_BASE_URL%/}/api/pipelines/$PIPELINE_ID/ci-plan" \
-              > "$plan_file"
-          else
-            if [[ -z "$FOREMAN_API_TOKEN" ]]; then
-              echo "::error::FOREMAN_API_TOKEN is required to resolve the CI plan for this event."
-              exit 1
+              > "$plan_file" || [[ ! -s "$plan_file" ]]; then
+              emit_fallback_plan "ci-plan fetch failed"
             fi
-
+          elif [[ -z "$FOREMAN_API_TOKEN" ]]; then
+            emit_fallback_plan "FOREMAN_API_TOKEN missing"
+          else
             payload="$(jq -nc \
               --arg workflow_name "$WORKFLOW_NAME" \
               --arg repository "${SOURCE_REPOSITORY:-$REPOSITORY}" \
@@ -426,18 +454,24 @@ jobs:
                 schedule: $schedule
               }')"
 
-            curl \
+            if ! curl \
               --silent \
               --show-error \
-              --fail \
               --retry 3 \
               --retry-all-errors \
+              --max-time 30 \
               --request POST \
               --header "Authorization: Bearer $FOREMAN_API_TOKEN" \
               --header "Content-Type: application/json" \
               --data "$payload" \
               "${FOREMAN_BASE_URL%/}/api/ci/github/gate-plan" \
-              > "$plan_file"
+              > "$plan_file" || [[ ! -s "$plan_file" ]]; then
+              emit_fallback_plan "gate-plan POST failed"
+            fi
+          fi
+
+          if ! jq empty "$plan_file" >/dev/null 2>&1; then
+            emit_fallback_plan "plan JSON invalid"
           fi
 
           # Distil signals consumed by reusable workflows. Done up front
@@ -1467,11 +1501,12 @@ jobs:
           curl \
             --silent \
             --show-error \
-            --fail \
             --retry 3 \
             --retry-all-errors \
+            --max-time 15 \
             --request POST \
             --header "Authorization: Bearer $FOREMAN_API_TOKEN" \
             --header "Content-Type: application/json" \
             --data "$payload" \
-            "${FOREMAN_BASE_URL%/}/api/pipelines/${PIPELINE_ID}/admin-callback/status"
+            "${FOREMAN_BASE_URL%/}/api/pipelines/${PIPELINE_ID}/admin-callback/status" \
+            || echo "::warning::Final status callback failed (non-fatal)"

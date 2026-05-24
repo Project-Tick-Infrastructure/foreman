@@ -84,7 +84,10 @@ jobs:
           use-flakehub: false
 
       - name: Setup Cachix
-        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+        id: cachix-setup
+        if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && env.CACHIX_AUTH_TOKEN != '' }}
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
         uses: cachix/cachix-action@v17
         with:
           name: meshmc
@@ -106,10 +109,18 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
           SYSTEM: ${{ matrix.system }}
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
         run: |
-          nix build --no-link --print-out-paths .#meshmc \
-            | tee -a "$GITHUB_STEP_SUMMARY" \
-            | xargs cachix pin meshmc "$TAG"-"$SYSTEM"
+          # Cachix yoksa sadece nix build yap, pin'i atla.
+          if [[ -z "${CACHIX_AUTH_TOKEN:-}" ]] || ! command -v cachix >/dev/null 2>&1; then
+            echo "::notice::CACHIX_AUTH_TOKEN missing or cachix not installed; skipping 'cachix pin'."
+            nix build --no-link --print-out-paths .#meshmc \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            nix build --no-link --print-out-paths .#meshmc \
+              | tee -a "$GITHUB_STEP_SUMMARY" \
+              | xargs cachix pin meshmc "$TAG"-"$SYSTEM"
+          fi
       - name: Foreman job finalize
         if: always()
         uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
