@@ -297,7 +297,7 @@ jobs:
       # ----------------------------------------------------------------
       - name: Upload artefacts
         if: steps.signing-key.outputs.has_key == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ppm-bootstrap-${{ inputs.seed-version }}-${{ inputs.target-system }}
           path: |
