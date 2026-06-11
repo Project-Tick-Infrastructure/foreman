@@ -384,7 +384,7 @@ jobs:
                 json4cpp_amalgam: false, tomlplusplus_fuzz: false,
                 neozip_fuzz: false, mnv_codeql: false, neozip_codeql: false,
                 meshmc_container: false, meshmc_nix: false,
-                "foreman-20": false, release_sources: false,
+                "foreman": false, release_sources: false,
                 beta_source_only: false
               },
               quarantined_tests: [],
@@ -962,24 +962,24 @@ jobs:
       foreman-callback-token: ${{ needs.gate.outputs.callback_token }}
     secrets: inherit
 
-  meshmc-nix:
-    name: "MeshMC Nix"
-    needs: [gate, meshmc]
-    if: >-
-      always() &&
-      !cancelled() &&
-      needs.meshmc.result == 'success' &&
-      fromJSON(needs.gate.outputs.jobs_json).meshmc_nix
-    uses: ./.github/workflows/meshmc-nix.yml
-    permissions:
-      contents: read
-    with:
-      source-repository: ${{ github.event.inputs.source-repository || '' }}
-      foreman-pipeline-id: ${{ needs.gate.outputs.pipeline_id }}
-      foreman-plan: ${{ needs.gate.outputs.foreman_plan }}
-      foreman-callback-url: ${{ needs.gate.outputs.callback_url }}
-      foreman-callback-token: ${{ needs.gate.outputs.callback_token }}
-    secrets: inherit
+  # meshmc-nix:
+  #   name: "MeshMC Nix"
+  #   needs: [gate, meshmc]
+  #   if: >-
+  #     always() &&
+  #     !cancelled() &&
+  #     needs.meshmc.result == 'success' &&
+  #     fromJSON(needs.gate.outputs.jobs_json).meshmc_nix
+  #   uses: ./.github/workflows/meshmc-nix.yml
+  #   permissions:
+  #     contents: read
+  #   with:
+  #     source-repository: ${{ github.event.inputs.source-repository || '' }}
+  #     foreman-pipeline-id: ${{ needs.gate.outputs.pipeline_id }}
+  #     foreman-plan: ${{ needs.gate.outputs.foreman_plan }}
+  #     foreman-callback-url: ${{ needs.gate.outputs.callback_url }}
+  #     foreman-callback-token: ${{ needs.gate.outputs.callback_token }}
+  #   secrets: inherit
 
   foreman20:
     name: "Foreman 2.0"
@@ -988,7 +988,7 @@ jobs:
       always() &&
       !cancelled() &&
       (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
-      fromJSON(needs.gate.outputs.jobs_json).foreman-20
+      fromJSON(needs.gate.outputs.jobs_json).foreman
     uses: ./.github/workflows/foreman-2.0-ci.yml
     permissions:
       contents: read
@@ -1275,11 +1275,11 @@ jobs:
 
   report-containers:
     name: "Report: Containers"
-    needs: [callback-start, meshmc-container, meshmc-nix]
+    needs: [callback-start, meshmc-container]
     if: >-
       always() &&
       needs.callback-start.outputs.pipeline_id != '' &&
-      (needs.meshmc-container.result != 'skipped' || needs.meshmc-nix.result != 'skipped')
+      (needs.meshmc-container.result != 'skipped')
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -1290,8 +1290,8 @@ jobs:
           job_name: "Containers & Nix"
           status: >-
             ${{
-              (needs.meshmc-container.result == 'failure' || needs.meshmc-nix.result == 'failure') && 'failure' ||
-              (needs.meshmc-container.result == 'cancelled' || needs.meshmc-nix.result == 'cancelled') && 'cancelled' ||
+              (needs.meshmc-container.result == 'failure' && 'failure') ||
+              (needs.meshmc-container.result == 'cancelled' && 'cancelled') ||
               'success'
             }}
 
@@ -1328,7 +1328,6 @@ jobs:
       - mnv-codeql
       - neozip-codeql
       - meshmc-container
-      - meshmc-nix
       - foreman20
     runs-on: ubuntu-latest
     steps:
@@ -1392,7 +1391,6 @@ jobs:
           check_job "MNV CodeQL"     "${{ needs.mnv-codeql.result }}"
           check_job "NeoZip CodeQL"  "${{ needs.neozip-codeql.result }}"
           check_job "MeshMC Docker"  "${{ needs.meshmc-container.result }}"
-          check_job "MeshMC Nix"     "${{ needs.meshmc-nix.result }}"
           check_job "Foreman 2.0"    "${{ needs.foreman20.result }}"
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -1442,7 +1440,6 @@ jobs:
       - mnv-codeql
       - neozip-codeql
       - meshmc-container
-      - meshmc-nix
       - verdict
       - release-sources
       - foreman20
