@@ -271,6 +271,8 @@ jobs:
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
+        with:
+          path: release-downloads
 
       - name: Check FTP credentials
         id: ftp-check-meshmc
@@ -294,6 +296,7 @@ jobs:
           version: ${{ needs.resolve.outputs.version }}
           product: meshmc
           beta-source-only: ${{ inputs.beta_source_only && 'true' || 'false' }}
+          artifacts-dir: ${{ github.workspace }}/release-downloads
           ftp-host: ${{ secrets.FTP_HOST }}
           ftp-user: ${{ secrets.FTP_USER }}
           ftp-port: ${{ secrets.FTP_SSH_PORT || '22' }}
@@ -419,6 +422,8 @@ jobs:
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
+        with:
+          path: release-downloads
 
       - name: Check FTP credentials
         id: ftp-check-neozip
@@ -441,6 +446,7 @@ jobs:
         with:
           version: ${{ needs.resolve.outputs.version }}
           product: neozip
+          artifacts-dir: ${{ github.workspace }}/release-downloads
           ftp-host: ${{ secrets.FTP_HOST }}
           ftp-user: ${{ secrets.FTP_USER }}
           ftp-port: ${{ secrets.FTP_SSH_PORT || '22' }}

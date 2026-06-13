@@ -33,6 +33,13 @@ inputs:
     description: Remote base directory
     required: false
     default: /var/www/ftp/Project-Tick
+  artifacts-dir:
+    description: >
+      Directory where artifacts were downloaded. Defaults to the
+      GitHub workspace. Use this when download-artifact targeted an
+      explicit path.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -104,28 +111,58 @@ runs:
         VERSION: ${{ inputs.version }}
         PRODUCT: ${{ inputs.product }}
         BETA_SOURCE_ONLY: ${{ inputs.beta-source-only }}
+        ARTIFACTS_DIR: ${{ inputs.artifacts-dir }}
       run: |
         set -euo pipefail
+
+        # Artifact'ların indirildiği dizin. Verilmediyse GITHUB_WORKSPACE.
+        # (download-artifact "download all" modunda path verilmezse
+        #  artifact'ları workspace köküne <name>/ alt diziniyle açar; bu
+        #  composite action'ın cwd'si ile her zaman aynı olmayabiliyor —
+        #  bu yüzden mutlak yola sabitliyoruz.)
+        SRC_ROOT="${ARTIFACTS_DIR:-${GITHUB_WORKSPACE:-$PWD}}"
+
+        echo "=== Staging from: ${SRC_ROOT} ==="
+        ls -la "${SRC_ROOT}" || true
+
         mkdir -p "deploy-bundle/${PRODUCT}"
 
+        copied=0
+
         # Kaynak arşivleri
-        if [[ -d "${PRODUCT}-source-archives" ]]; then
-          cp -a "${PRODUCT}-source-archives/." "deploy-bundle/${PRODUCT}/"
-        elif [[ -d "source-${PRODUCT}" ]]; then
-          cp -a "source-${PRODUCT}/." "deploy-bundle/${PRODUCT}/"
+        if [[ -d "${SRC_ROOT}/${PRODUCT}-source-archives" ]]; then
+          cp -a "${SRC_ROOT}/${PRODUCT}-source-archives/." "deploy-bundle/${PRODUCT}/"
+          copied=1
+        elif [[ -d "${SRC_ROOT}/source-${PRODUCT}" ]]; then
+          cp -a "${SRC_ROOT}/source-${PRODUCT}/." "deploy-bundle/${PRODUCT}/"
+          copied=1
         fi
 
         # MeshMC binary'leri
         if [[ "$PRODUCT" == "meshmc" && "$BETA_SOURCE_ONLY" != "true" ]]; then
-          find . -maxdepth 1 -type f -name 'MeshMC-*' -exec cp {} "deploy-bundle/${PRODUCT}/" \;
+          while IFS= read -r -d '' f; do
+            cp "$f" "deploy-bundle/${PRODUCT}/"
+            copied=1
+          done < <(find "${SRC_ROOT}" -maxdepth 1 -type f -name 'MeshMC-*' -print0)
         fi
 
         # NeoZip binary'leri
         if [[ "$PRODUCT" == "neozip" ]]; then
-          for d in neozip-win-*; do
+          for d in "${SRC_ROOT}"/neozip-win-*; do
             [[ -d "$d" ]] || continue
             cp -a "$d"/. "deploy-bundle/${PRODUCT}/"
+            copied=1
           done
+        fi
+
+        # Hiçbir şey kopyalanmadıysa sessizce "başarılı" olma — patla.
+        if [[ "$copied" -eq 0 ]]; then
+          echo "::error::No artifacts staged for ${PRODUCT} ${VERSION}." \
+               "Searched in ${SRC_ROOT} for '${PRODUCT}-source-archives/'," \
+               "'source-${PRODUCT}/'" \
+               "$( [[ "$PRODUCT" == "meshmc" && "$BETA_SOURCE_ONLY" != "true" ]] && echo ", 'MeshMC-*'" )" \
+               "$( [[ "$PRODUCT" == "neozip" ]] && echo ", 'neozip-win-*'" )."
+          exit 1
         fi
 
         # SHA-256 checksums
@@ -135,6 +172,12 @@ runs:
 
         echo "=== Deployment bundle ==="
         find "deploy-bundle" -type f | sort
+
+        # Bundle yine de boşsa (cp başarısızsa) deploy'a izin verme.
+        if [[ -z "$(find "deploy-bundle/${PRODUCT}" -type f -print -quit)" ]]; then
+          echo "::error::deploy-bundle/${PRODUCT} is empty after staging."
+          exit 1
+        fi
 
     - name: Deploy to FTP
       shell: bash
