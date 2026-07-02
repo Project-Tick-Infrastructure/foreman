@@ -78,7 +78,7 @@ runs:
     - name: Foreman JUnit upload
       if: inputs.junit_path != '' && (inputs.pipeline_id != '' || inputs.callback_url != '')
       continue-on-error: true
-      uses: Project-Tick/Project-Tick/.github/actions/foreman-junit-upload@master
+      uses: Project-Tick/Project-Tick/.github/actions/foreman-junit-upload@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
       with:
         callback_url:      ${{ inputs.callback_url }}
         callback_token:    ${{ inputs.callback_token }}
@@ -94,7 +94,7 @@ runs:
     # dashboard can render runner-class breakdowns.
     - name: Foreman job-final callback
       if: inputs.pipeline_id != '' || inputs.callback_url != ''
-      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-callback@master
+      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-callback@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
       with:
         callback_url:      ${{ inputs.callback_url }}
         callback_token:    ${{ inputs.callback_token }}

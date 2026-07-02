@@ -40,11 +40,11 @@ permissions:
 jobs:
   ci_test_gcc:
     runs-on: ubuntu-latest
-    container: gcc:latest
+    container: gcc:latest@sha256:af4cbf4b5789035f6fad5221e1c3e2dc5c2a419b32c83640c6ef27b4af4a5854
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -54,18 +54,18 @@ jobs:
           plan_json:         ${{ inputs.foreman-plan }}
       - name: install git
         run: apt-get install git
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Get latest CMake and ninja
-        uses: lukka/get-cmake@v4.3.4
+        uses: lukka/get-cmake@f5b8fbb4d77cec1acc5a5f9f0df4beffaf5d98d9 # v4.3.4
       - name: Run CMake
         run: cmake -S ${{ inputs.source-repository != '' && '.' || 'json4cpp' }} -B build -DJSON_CI=On
       - name: Build
         run: cmake --build build --target ci_test_gcc
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -83,7 +83,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -91,20 +91,20 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Install Valgrind
         run: sudo apt-get update ; sudo apt-get install -y valgrind
       - name: Get latest CMake and ninja
-        uses: lukka/get-cmake@v4.3.4
+        uses: lukka/get-cmake@f5b8fbb4d77cec1acc5a5f9f0df4beffaf5d98d9 # v4.3.4
       - name: Run CMake
         run: cmake -S ${{ inputs.source-repository != '' && '.' || 'json4cpp' }} -B build -DJSON_CI=On
       - name: Build
         run: cmake --build build --target ${{ matrix.target }}
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -115,7 +115,7 @@ jobs:
 
   ci_static_analysis_clang:
     runs-on: ubuntu-latest
-    container: silkeh/clang:dev
+    container: silkeh/clang:dev@sha256:45bedaf7bd6415a57bd8a011b3f56d0bc8d154f653357f38b5572ce055563325
     strategy:
       fail-fast: false
       matrix:
@@ -123,7 +123,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -133,18 +133,18 @@ jobs:
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Install dependencies
         run: apt-get update ; apt-get install -y git clang-tools iwyu unzip
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Get latest CMake and ninja
-        uses: lukka/get-cmake@v4.3.4
+        uses: lukka/get-cmake@f5b8fbb4d77cec1acc5a5f9f0df4beffaf5d98d9 # v4.3.4
       - name: Run CMake
         run: cmake -S ${{ inputs.source-repository != '' && '.' || 'json4cpp' }} -B build -DJSON_CI=On
       - name: Build
         run: cmake --build build --target ${{ matrix.target }}
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -163,7 +163,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -171,18 +171,18 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Get latest CMake and ninja
-        uses: lukka/get-cmake@v4.3.4
+        uses: lukka/get-cmake@f5b8fbb4d77cec1acc5a5f9f0df4beffaf5d98d9 # v4.3.4
       - name: Run CMake
         run: cmake -S ${{ inputs.source-repository != '' && '.' || 'json4cpp' }} -B build -DJSON_CI=On
       - name: Build
         run: cmake --build build --target ci_test_compiler_default
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -201,7 +201,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -211,18 +211,18 @@ jobs:
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Install dependencies
         run: apt-get update ; apt-get install -y git clang-tools iwyu unzip
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Get latest CMake and ninja
-        uses: lukka/get-cmake@v4.3.4
+        uses: lukka/get-cmake@f5b8fbb4d77cec1acc5a5f9f0df4beffaf5d98d9 # v4.3.4
       - name: Run CMake
         run: cmake -S ${{ inputs.source-repository != '' && '.' || 'json4cpp' }} -B build -DJSON_CI=On
       - name: Build
         run: cmake --build build --target ci_test_compiler_default
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -236,7 +236,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -244,7 +244,7 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Install dependencies
@@ -258,13 +258,13 @@ jobs:
       - name: Build
         run: cmake --build build --target ci_test_coverage
       - name: Upload coverage report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: code-coverage-report
           path: build/html
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -282,7 +282,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -290,7 +290,7 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Run CMake
@@ -299,7 +299,7 @@ jobs:
         run: cmake --build build --target ci_test_clang
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -317,7 +317,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -325,7 +325,7 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Run CMake
@@ -334,7 +334,7 @@ jobs:
         run: cmake --build build --config Release --target ci_test_msvc
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}

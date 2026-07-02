@@ -130,7 +130,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -139,7 +139,7 @@ jobs:
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Checkout
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           ref: ${{ inputs.source-ref || '' }}
           source-repository: ${{ inputs.source-repository || '' }}
@@ -147,7 +147,7 @@ jobs:
 
       - name: Setup dependencies
         id: setup-dependencies
-        uses: Project-Tick/Project-Tick/.github/actions/meshmc/setup-dependencies@master
+        uses: Project-Tick/Project-Tick/.github/actions/meshmc/setup-dependencies@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           build-type: ${{ env.BUILD_TYPE }}
           artifact-name: ${{ matrix.artifact-name }}
@@ -610,7 +610,7 @@ jobs:
 
       - name: Package (Linux)
         if: ${{ runner.os == 'Linux' }}
-        uses: Project-Tick/Project-Tick/.github/actions/meshmc/package/linux@master
+        uses: Project-Tick/Project-Tick/.github/actions/meshmc/package/linux@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           version: ${{ steps.short-version.outputs.version }}
           build-type: ${{ steps.setup-dependencies.outputs.build-type }}
@@ -621,7 +621,7 @@ jobs:
 
       - name: Package (macOS)
         if: ${{ runner.os == 'macOS' }}
-        uses: Project-Tick/Project-Tick/.github/actions/meshmc/package/macos@master
+        uses: Project-Tick/Project-Tick/.github/actions/meshmc/package/macos@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           version: ${{ steps.short-version.outputs.version }}
           build-type: ${{ steps.setup-dependencies.outputs.build-type }}
@@ -636,7 +636,7 @@ jobs:
 
       - name: Package (Windows)
         if: ${{ runner.os == 'Windows' }}
-        uses: Project-Tick/Project-Tick/.github/actions/meshmc/package/windows@master
+        uses: Project-Tick/Project-Tick/.github/actions/meshmc/package/windows@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           version: ${{ steps.short-version.outputs.version }}
           build-type: ${{ env.BUILD_TYPE }}
@@ -646,7 +646,7 @@ jobs:
           msystem: ${{ matrix.msystem }}
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}

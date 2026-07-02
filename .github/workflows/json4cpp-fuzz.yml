@@ -39,7 +39,7 @@ jobs:
     steps:
     - name: Foreman job init
       id: foreman
-      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
       with:
         callback_url:      ${{ inputs.foreman-callback-url }}
         callback_token:    ${{ inputs.foreman-callback-token }}
@@ -53,19 +53,19 @@ jobs:
         egress-policy: audit
 
     - name: Checkout repository
-      uses: Project-Tick-Infrastructure/checkout@v5
+      uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
       with:
         source-repository: ${{ inputs.source-repository || '' }}
         show-progress: 'false'
 
     - name: Build Fuzzers
       id: build
-      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@492644231aa8df7988a8151ec768a04217b51bcf # master
       with:
         dry-run: false
         language: c++
     - name: Run Fuzzers
-      uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+      uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@492644231aa8df7988a8151ec768a04217b51bcf # master
       with:
         fuzz-seconds: 300
         dry-run: false
@@ -79,7 +79,7 @@ jobs:
 
     - name: Foreman job finalize
       if: always()
-      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
       with:
         callback_url:      ${{ inputs.foreman-callback-url }}
         callback_token:    ${{ inputs.foreman-callback-token }}

@@ -50,7 +50,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -58,12 +58,12 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Install vcpkg deps (Windows)
         if: matrix.os == 'windows-latest'
-        uses: lukka/run-vcpkg@v11.6
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11.6
         with:
           vcpkgGitCommitId: '77df67cfff9c12ccfdb52284e07c87c75092f723'
       - name: Install vcpkg packages (Windows)
@@ -87,7 +87,7 @@ jobs:
         run: ctest --test-dir build -C "$BUILD_TYPE"
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -108,7 +108,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -116,7 +116,7 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - name: Install deps (macOS)
@@ -134,7 +134,7 @@ jobs:
         run: make -j 2 distcheck
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}

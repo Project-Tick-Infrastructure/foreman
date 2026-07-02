@@ -47,7 +47,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -55,7 +55,7 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
       - id: make
@@ -83,7 +83,7 @@ jobs:
           echo "count=${#entries[@]}" >> "$GITHUB_OUTPUT"
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -103,7 +103,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -111,12 +111,12 @@ jobs:
           foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
-      - uses: Project-Tick-Infrastructure/checkout@v5
+      - uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
 
       - name: Login to GHCR
-        uses: docker/login-action@v4.2.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -132,7 +132,7 @@ jobs:
           echo "immutable_tag=${ts}-r${GITHUB_RUN_ID}-a${GITHUB_RUN_ATTEMPT}-${short_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Build image
-        uses: docker/build-push-action@v7.2.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: ${{ inputs.source-repository != '' && '.' || 'images4docker' }}
           file: ${{ matrix.dockerfile }}
@@ -159,7 +159,7 @@ jobs:
           exit 1
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}

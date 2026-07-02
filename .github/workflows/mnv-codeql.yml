@@ -49,24 +49,24 @@ jobs:
     steps:
     - name: Start log collector
       if: inputs.foreman-pipeline-id != ''
-      uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+      uses: Project-Tick/Project-Tick/.github/actions/log-collector@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
       with:
         pipeline_id: ${{ inputs.foreman-pipeline-id }}
         foreman_api_token: ${{ secrets.FOREMAN_API_TOKEN }}
         job_name: ${{ github.job }}
     - name: Checkout repository
-      uses: Project-Tick-Infrastructure/checkout@v5
+      uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
       with:
         source-repository: ${{ inputs.source-repository || '' }}
         show-progress: 'false'
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4
+      uses: github/codeql-action/init@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
       with:
         languages: ${{ matrix.language }}
 
     - name: Autobuild
-      uses: github/codeql-action/autobuild@v4
+      uses: github/codeql-action/autobuild@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4
+      uses: github/codeql-action/analyze@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4

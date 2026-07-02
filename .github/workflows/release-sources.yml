@@ -110,7 +110,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -152,7 +152,7 @@ jobs:
   # ── MeshMC ──────────────────────────────────────────────────────────────────
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -184,7 +184,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -193,7 +193,7 @@ jobs:
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Checkout
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           ref: ${{ inputs.source-ref || github.ref }}
           source-repository: ${{ inputs.source-repository || '' }}
@@ -207,7 +207,7 @@ jobs:
 
       - name: Prepare source tree
         id: prepare
-        uses: Project-Tick/Project-Tick/.github/actions/prepare-source-tree@master
+        uses: Project-Tick/Project-Tick/.github/actions/prepare-source-tree@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           project: meshmc
           source-repository: ${{ inputs.source-repository || '' }}
@@ -215,7 +215,7 @@ jobs:
           gitlab-source-username: ${{ vars.PT_GITLAB_SOURCE_USERNAME }}
 
       - name: Package source archives
-        uses: Project-Tick/Project-Tick/.github/actions/package-source@master
+        uses: Project-Tick/Project-Tick/.github/actions/package-source@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           project: meshmc
           version: ${{ env.VERSION }}
@@ -225,14 +225,14 @@ jobs:
           gpg-private-key-id: ${{ secrets.GPG_PRIVATE_KEY_ID }}
 
       - name: Upload source artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: meshmc-source-archives
           path: release-artifacts/
           if-no-files-found: error
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -255,7 +255,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -264,13 +264,13 @@ jobs:
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Checkout
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           ref: ${{ inputs.source-ref || github.ref }}
           source-repository: ${{ inputs.source-repository || '' }}
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: release-downloads
 
@@ -291,7 +291,7 @@ jobs:
 
       - name: Stage and deploy
         if: steps.ftp-check-meshmc.outputs.has_creds == 'true'
-        uses: Project-Tick/Project-Tick/.github/actions/deploy-release@master
+        uses: Project-Tick/Project-Tick/.github/actions/deploy-release@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           version: ${{ needs.resolve.outputs.version }}
           product: meshmc
@@ -305,7 +305,7 @@ jobs:
   # ── NeoZip ──────────────────────────────────────────────────────────────────
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -335,7 +335,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -344,7 +344,7 @@ jobs:
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Checkout
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           ref: ${{ inputs.source-ref || github.ref }}
           source-repository: ${{ inputs.source-repository || '' }}
@@ -358,7 +358,7 @@ jobs:
 
       - name: Prepare source tree
         id: prepare
-        uses: Project-Tick/Project-Tick/.github/actions/prepare-source-tree@master
+        uses: Project-Tick/Project-Tick/.github/actions/prepare-source-tree@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           project: neozip
           source-repository: ${{ inputs.source-repository || '' }}
@@ -366,7 +366,7 @@ jobs:
           gitlab-source-username: ${{ vars.PT_GITLAB_SOURCE_USERNAME }}
 
       - name: Package source archives
-        uses: Project-Tick/Project-Tick/.github/actions/package-source@master
+        uses: Project-Tick/Project-Tick/.github/actions/package-source@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           project: neozip
           version: ${{ env.VERSION }}
@@ -376,14 +376,14 @@ jobs:
           gpg-private-key-id: ${{ secrets.GPG_PRIVATE_KEY_ID }}
 
       - name: Upload source artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: neozip-source-archives
           path: release-artifacts/
           if-no-files-found: error
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -406,7 +406,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -415,13 +415,13 @@ jobs:
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Checkout
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           ref: ${{ inputs.source-ref || github.ref }}
           source-repository: ${{ inputs.source-repository || '' }}
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: release-downloads
 
@@ -442,7 +442,7 @@ jobs:
 
       - name: Stage and deploy
         if: steps.ftp-check-neozip.outputs.has_creds == 'true'
-        uses: Project-Tick/Project-Tick/.github/actions/deploy-release@master
+        uses: Project-Tick/Project-Tick/.github/actions/deploy-release@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           version: ${{ needs.resolve.outputs.version }}
           product: neozip
@@ -457,7 +457,7 @@ jobs:
   # json4cpp, libnbtplusplus, mnv, tomlplusplus
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -478,7 +478,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -487,7 +487,7 @@ jobs:
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Checkout
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           ref: ${{ inputs.source-ref || github.ref }}
           source-repository: ${{ inputs.source-repository || '' }}
@@ -501,7 +501,7 @@ jobs:
 
       - name: Prepare source tree
         id: prepare
-        uses: Project-Tick/Project-Tick/.github/actions/prepare-source-tree@master
+        uses: Project-Tick/Project-Tick/.github/actions/prepare-source-tree@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           project: ${{ needs.resolve.outputs.project }}
           source-repository: ${{ inputs.source-repository || '' }}
@@ -509,7 +509,7 @@ jobs:
           gitlab-source-username: ${{ vars.PT_GITLAB_SOURCE_USERNAME }}
 
       - name: Package source archives
-        uses: Project-Tick/Project-Tick/.github/actions/package-source@master
+        uses: Project-Tick/Project-Tick/.github/actions/package-source@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           project: ${{ needs.resolve.outputs.project }}
           version: ${{ env.VERSION }}
@@ -519,14 +519,14 @@ jobs:
           gpg-private-key-id: ${{ secrets.GPG_PRIVATE_KEY_ID }}
 
       - name: Upload source artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: source-${{ needs.resolve.outputs.project }}
           path: release-artifacts/
           if-no-files-found: error
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -550,7 +550,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -559,13 +559,13 @@ jobs:
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Checkout
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           ref: ${{ inputs.source-ref || github.ref }}
           source-repository: ${{ inputs.source-repository || '' }}
 
       - name: Download artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: source-${{ needs.resolve.outputs.project }}
           path: deploy-artifacts
@@ -605,7 +605,7 @@ jobs:
   # ── Callback Status ──────────────────────────────────────────────────────────
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -632,7 +632,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -641,7 +641,7 @@ jobs:
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Checkout
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           ref: ${{ inputs.source-ref || github.ref }}
           source-repository: ${{ inputs.source-repository || '' }}
@@ -669,7 +669,7 @@ jobs:
 
       - name: Report final status
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-send-callback@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-send-callback@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url: ${{ inputs.callback_url || '' }}
           callback_token: ${{ inputs.callback_token || '' }}
@@ -680,7 +680,7 @@ jobs:
           payload_json: ${{ format('{{"status":"{0}"}}', steps.resolve-cancelled.outputs.status || steps.resolve-status.outputs.status || 'failure') }}
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}

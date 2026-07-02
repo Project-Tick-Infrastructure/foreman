@@ -125,7 +125,7 @@ runs:
     # from the cancel-check / callback steps below is captured too.
     - name: Foreman log collector
       if: inputs.skip_log_collector != 'true' && (inputs.pipeline_id != '' || inputs.callback_url != '')
-      uses: Project-Tick/Project-Tick/.github/actions/log-collector@master
+      uses: Project-Tick/Project-Tick/.github/actions/log-collector@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
       with:
         callback_url:      ${{ inputs.callback_url }}
         callback_token:    ${{ inputs.callback_token }}
@@ -140,7 +140,7 @@ runs:
     - name: Foreman cancel check
       id: cancel
       if: inputs.skip_cancel_check != 'true' && (inputs.callback_url != '' || inputs.pipeline_id != '')
-      uses: Project-Tick/Project-Tick/.github/actions/foreman-cancel-check@master
+      uses: Project-Tick/Project-Tick/.github/actions/foreman-cancel-check@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
       with:
         callback_url:     ${{ inputs.callback_url }}
         callback_token:   ${{ inputs.callback_token }}
@@ -153,7 +153,7 @@ runs:
     # break the job.
     - name: Foreman job-running callback
       if: inputs.pipeline_id != '' || inputs.callback_url != ''
-      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-callback@master
+      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-callback@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
       with:
         callback_url:      ${{ inputs.callback_url }}
         callback_token:    ${{ inputs.callback_token }}
@@ -173,6 +173,6 @@ runs:
     - name: Foreman exclude patterns
       id: exclude
       if: inputs.plan_json != ''
-      uses: Project-Tick/Project-Tick/.github/actions/foreman-exclude-patterns@master
+      uses: Project-Tick/Project-Tick/.github/actions/foreman-exclude-patterns@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
       with:
         plan_json: ${{ inputs.plan_json }}

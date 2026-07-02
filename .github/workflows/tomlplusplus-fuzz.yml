@@ -41,7 +41,7 @@ jobs:
     steps:
     - name: Foreman job init
       id: foreman
-      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
       with:
         callback_url:      ${{ inputs.foreman-callback-url }}
         callback_token:    ${{ inputs.foreman-callback-token }}
@@ -50,37 +50,37 @@ jobs:
         job_name:          ${{ github.job }}
         plan_json:         ${{ inputs.foreman-plan }}
     - name: Checkout repository
-      uses: Project-Tick-Infrastructure/checkout@v5
+      uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
       with:
         source-repository: ${{ inputs.source-repository || '' }}
         show-progress: 'false'
     - name: Build Fuzzers
       id: build
-      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@492644231aa8df7988a8151ec768a04217b51bcf # master
       with:
         language: c++
     - name: Run Fuzzers
-      uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+      uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@492644231aa8df7988a8151ec768a04217b51bcf # master
       with:
         language: c++
         fuzz-seconds: 800
         output-sarif: true
     - name: Upload Crash
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
       if: failure() && steps.build.outcome == 'success'
       with:
         name: tomlplusplus-fuzz-artifacts
         path: ./out/artifacts
     - name: Upload Sarif
       if: always() && steps.build.outcome == 'success'
-      uses: github/codeql-action/upload-sarif@v4
+      uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
       with:
         sarif_file: cifuzz-sarif/results.sarif
         checkout_path: cifuzz-sarif
 
     - name: Foreman job finalize
       if: always()
-      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+      uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
       with:
         callback_url:      ${{ inputs.foreman-callback-url }}
         callback_token:    ${{ inputs.foreman-callback-token }}

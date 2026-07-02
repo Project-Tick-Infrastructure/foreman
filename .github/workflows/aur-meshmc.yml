@@ -17,7 +17,7 @@ jobs:
   update-aur:
     name: Update AUR Package
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    container: archlinux:latest@sha256:068a765646e75e51fe5d544b0f95c85d0322d0a372659e9d5f10fb8402ca53f1
     # AUR yayını AUR_SSH_PRIVATE_KEY zorunlu. Secret yoksa
     # job tamamen skip — workflow yine de "success" olur.
     if: ${{ github.event_name == 'workflow_dispatch' || vars.AUR_DEPLOY_ENABLED == 'true' || github.event_name == 'release' }}
@@ -43,7 +43,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.creds.outputs.has_key == 'true'
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
           show-progress: 'false'

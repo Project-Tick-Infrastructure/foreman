@@ -40,7 +40,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -49,7 +49,7 @@ jobs:
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Checkout repository
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
           show-progress: 'false'
@@ -63,7 +63,7 @@ jobs:
           CXX: clang++
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -132,7 +132,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -141,7 +141,7 @@ jobs:
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Checkout repository
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
           show-progress: 'false'
@@ -163,7 +163,7 @@ jobs:
           ${{ matrix.test_env }} ctest "${ctest_args[@]}"
       - name: Foreman JUnit upload
         if: always() && inputs.foreman-callback-url != ''
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-junit-upload@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-junit-upload@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:   ${{ inputs.foreman-callback-url }}
           callback_token: ${{ inputs.foreman-callback-token }}
@@ -173,7 +173,7 @@ jobs:
           junit_path: ${{ inputs.source-repository != '' && '.' || 'cmark' }}/build/junit-cmark.xml
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -196,7 +196,7 @@ jobs:
     steps:
       - name: Foreman job init
         id: foreman
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-wrapper@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
@@ -205,11 +205,11 @@ jobs:
           job_name:          ${{ github.job }}
           plan_json:         ${{ inputs.foreman-plan }}
       - name: Checkout repository
-        uses: Project-Tick-Infrastructure/checkout@v5
+        uses: Project-Tick-Infrastructure/checkout@22f699d1b88f4f7260eb5633e8e31670263e3cbc # v5
         with:
           source-repository: ${{ inputs.source-repository || '' }}
           show-progress: 'false'
-      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
       - name: Build and test
         working-directory: ${{ inputs.source-repository != '' && '.' || 'cmark' }}
         env:
@@ -229,7 +229,7 @@ jobs:
           ctest "${ctest_args[@]}"
       - name: Foreman JUnit upload
         if: always() && inputs.foreman-callback-url != ''
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-junit-upload@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-junit-upload@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:   ${{ inputs.foreman-callback-url }}
           callback_token: ${{ inputs.foreman-callback-token }}
@@ -239,14 +239,14 @@ jobs:
           junit_path: ${{ inputs.source-repository != '' && '.' || 'cmark' }}/build/junit-cmark.xml
       - name: Upload artifact
         if: ${{ matrix.build_type == 'static' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cmark windows ${{ matrix.build_type }}
           path: cmark/build/src/Debug/cmark.exe
           if-no-files-found: error
       - name: Foreman job finalize
         if: always()
-        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@master
+        uses: Project-Tick/Project-Tick/.github/actions/foreman-job-finalize@b9b6f639fc4b6d21cb381fcacb6cf4399f51d583 # master
         with:
           callback_url:      ${{ inputs.foreman-callback-url }}
           callback_token:    ${{ inputs.foreman-callback-token }}
