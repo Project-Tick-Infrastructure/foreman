@@ -29,83 +29,211 @@ on:
       source-repository:
         type: string
         default: ""
+      foreman-pipeline-id:
+        type: string
+        default: ""
+      foreman-plan:
+        type: string
+        default: ""
+      foreman-callback-url:
+        type: string
+        default: ""
+      foreman-callback-token:
+        type: string
+        default: ""
 
 permissions: {}
 
+env:
+  CI_EVENT_NAME: ${{ github.event_name }}
+  CI_REF: ${{ inputs.source-ref || github.ref }}
+  CI_SHA: ${{ github.sha }}
+
 jobs:
+  callback-start:
+    name: "Callback Start"
+    runs-on: ubuntu-latest
+    outputs:
+      callback_url: ${{ steps.prepare.outputs.callback_url }}
+      cb_auth: ${{ steps.prepare.outputs.cb_auth }}
+      pipeline_id: ${{ steps.prepare.outputs.pipeline_id }}
+    permissions: {}
+    steps:
+      - name: Prepare callback destination
+        id: prepare
+        shell: bash
+        env:
+          INPUT_PIPELINE_ID: ${{ inputs.foreman-pipeline-id }}
+          INPUT_CALLBACK_URL: ${{ inputs.foreman-callback-url }}
+          INPUT_CALLBACK_TOKEN: ${{ inputs.foreman-callback-token }}
+          FOREMAN_BASE_URL: ${{ vars.FOREMAN_BASE_URL || 'https://builds.projecttick.net' }}
+          FOREMAN_API_TOKEN: ${{ secrets.FOREMAN_API_TOKEN || '' }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_REPOSITORY: ${{ inputs.source-repository || '' }}
+          REF: ${{ env.CI_REF }}
+          SHA: ${{ env.CI_SHA }}
+        run: |
+          set -euo pipefail
+
+          callback_url=""
+          callback_token=""
+          pipeline_id=""
+
+          if [[ -n "$INPUT_CALLBACK_URL" && -n "$INPUT_CALLBACK_TOKEN" ]]; then
+            callback_url="$INPUT_CALLBACK_URL"
+            callback_token="$INPUT_CALLBACK_TOKEN"
+            pipeline_id="$INPUT_PIPELINE_ID"
+          elif [[ -n "$FOREMAN_API_TOKEN" ]]; then
+            if [[ -n "$SOURCE_REPOSITORY" ]]; then
+              app_id="$(basename "$SOURCE_REPOSITORY" .git)"
+              repo="$SOURCE_REPOSITORY"
+            else
+              app_id="${REPOSITORY#*/}"
+              repo="$REPOSITORY"
+            fi
+
+            payload="$(jq -nc \
+              --arg app_id "$app_id" \
+              --arg repo "$repo" \
+              --arg ref "$REF" \
+              --arg sha "$SHA" \
+              '{
+                app_id: $app_id,
+                params: {
+                  repo: $repo,
+                  ref: $ref,
+                  sha: $sha,
+                  native_github_ci: "true",
+                  pipeline_kind: "uppfinna"
+                }
+              }')"
+
+            if register_response="$(curl \
+              --silent --show-error --fail \
+              --retry 3 --retry-all-errors \
+              --request POST \
+              --header "Authorization: Bearer $FOREMAN_API_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "$payload" \
+              "${FOREMAN_BASE_URL%/}/api/pipelines/external")"; then
+              callback_url="$(printf '%s' "$register_response" | jq -r '.callback_url // ""')"
+              callback_token="$(printf '%s' "$register_response" | jq -r '.callback_token // ""')"
+              pipeline_id="$(printf '%s' "$register_response" | jq -r '.pipeline_id // ""')"
+            else
+              echo "::warning::Failed to register this Uppfinna run in Foreman."
+            fi
+          else
+            echo "No Foreman callback destination configured."
+          fi
+
+          if [[ -z "$pipeline_id" && -n "$callback_url" ]]; then
+            pipeline_id="$(printf '%s' "$callback_url" | sed -nE 's#^.*/api/pipelines/([0-9a-fA-F-]+)/callback/?$#\1#p')"
+          fi
+
+          {
+            echo "callback_url=$callback_url"
+            echo "cb_auth=$callback_token"
+            echo "pipeline_id=$pipeline_id"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Report workflow run URL
+        if: steps.prepare.outputs.callback_url != '' && steps.prepare.outputs.cb_auth != ''
+        shell: bash
+        env:
+          CALLBACK_URL: ${{ steps.prepare.outputs.callback_url }}
+          CALLBACK_TOKEN: ${{ steps.prepare.outputs.cb_auth }}
+          RUN_URL: ${{ format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) }}
+        run: |
+          set -euo pipefail
+          payload="$(printf '{\"log_url\":\"%s\"}' "$RUN_URL")"
+          curl \
+            --silent --show-error \
+            --retry 3 --retry-all-errors --max-time 15 \
+            --request POST \
+            --header "Authorization: Bearer $CALLBACK_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "$payload" \
+            "${CALLBACK_URL%/}/log_url" \
+            || echo "::warning::log_url callback failed (non-fatal)"
+
   rspec-pg16:
     name: RSpec pg16
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-rspec-pg16.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   rspec-pg18:
     name: RSpec pg18
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-rspec-pg18.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   rspec-valkey:
     name: RSpec valkey
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-rspec-valkey.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   rspec-redis70:
     name: RSpec redis70
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-rspec-redis70.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   build-cng:
     name: Build CNG
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-build-cng.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   cng-build-images:
     name: CNG Build Images
-    needs: build-cng
+    needs: [callback-start, build-cng]
     if: needs.build-cng.result == 'success'
     uses: ./.github/workflows/uppfinna-cng-build-images.yml
     permissions:
@@ -118,7 +246,7 @@ jobs:
 
   deploy:
     name: Deploy
-    needs: [build-cng, cng-build-images, rspec-pg16, rspec-pg18, rspec-valkey, rspec-redis70, rubocop, yaml-lint, setup-checks]
+    needs: [callback-start, build-cng, cng-build-images, rspec-pg16, rspec-pg18, rspec-valkey, rspec-redis70, rubocop, yaml-lint, setup-checks]
     if: |
       vars.DEPLOY_ENABLED == 'true' &&
       needs.build-cng.result == 'success' &&
@@ -138,400 +266,527 @@ jobs:
       environment: production
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   setup-checks:
     name: Setup Checks
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-setup-checks.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   gems:
     name: Gems
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-gems.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   vendored-gems:
     name: Vendored Gems
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-vendored-gems.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   compile-test-assets:
     name: Compile Test Assets
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-compile-test-assets.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   eslint-docs:
     name: ESLint Docs
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-eslint-docs.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   jest-build-cache:
     name: Jest Build Cache
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-jest-build-cache.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   rubocop-docs:
     name: RuboCop Docs
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-rubocop-docs.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   yaml-lint:
     name: YAML Lint
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-yaml-lint.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   rubocop:
     name: RuboCop
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-rubocop.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   haml-lint:
     name: HAML-Lint
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-haml-lint.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   eslint:
     name: ESLint
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-eslint.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   static-analysis:
     name: Static Analysis
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-static-analysis.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   graphql-schema-dump:
     name: GraphQL Schema Dump
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-graphql-schema-dump.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   static-verification-db:
     name: Static Verification (DB)
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-static-verification-db.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   audit-event-types-verify:
     name: Audit Event Types Verify
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-audit-event-types-verify.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   custom-roles-verify:
     name: Custom Roles Verify
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-custom-roles-verify.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   permissions-verify:
     name: Permissions Verify
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-permissions-verify.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   ci-job-token-policies-verify:
     name: CI Job Token Policies Verify
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-ci-job-token-policies-verify.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   db-rollback:
     name: DB Rollback
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-db-rollback.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   db-migrate-reset:
     name: DB Migrate Reset (single-db)
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-db-migrate-reset.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   db-check-schema:
     name: DB Check Schema
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-db-check-schema.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   db-migrate-non-superuser:
     name: DB Migrate Non-Superuser
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-db-migrate-non-superuser.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   workhorse-verify:
     name: Workhorse Verify
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-workhorse-verify.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   workhorse-logging-field-validator:
     name: Workhorse Logging Field Validator
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-workhorse-logging-field-validator.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   workhorse-test:
     name: Workhorse Test (Go)
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-workhorse-test.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   fast-spec:
     name: Fast Specs
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-fast-spec.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   rspec:
     name: RSpec
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-rspec.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
 
   jest:
     name: Jest
+    needs: callback-start
     uses: ./.github/workflows/uppfinna-jest.yml
     permissions:
       contents: read
     with:
       source-ref: ${{ inputs.source-ref }}
       source-repository: ${{ inputs.source-repository }}
-      foreman-pipeline-id: ${{ inputs.foreman-pipeline-id }}
+      foreman-pipeline-id: ${{ needs.callback-start.outputs.pipeline_id }}
       foreman-plan: ${{ inputs.foreman-plan }}
-      foreman-callback-url: ${{ inputs.foreman-callback-url }}
-      foreman-callback-token: ${{ inputs.foreman-callback-token }}
+      foreman-callback-url: ${{ needs.callback-start.outputs.callback_url }}
+      foreman-callback-token: ${{ needs.callback-start.outputs.cb_auth }}
     secrets: inherit
+
+  verdict:
+    name: "Uppfinna Verdict"
+    if: always()
+    needs:
+      - callback-start
+      - rspec-pg16
+      - rspec-pg18
+      - rspec-valkey
+      - rspec-redis70
+      - build-cng
+      - cng-build-images
+      - setup-checks
+      - gems
+      - vendored-gems
+      - compile-test-assets
+      - eslint-docs
+      - jest-build-cache
+      - rubocop-docs
+      - yaml-lint
+      - rubocop
+      - haml-lint
+      - eslint
+      - static-analysis
+      - graphql-schema-dump
+      - static-verification-db
+      - audit-event-types-verify
+      - custom-roles-verify
+      - permissions-verify
+      - ci-job-token-policies-verify
+      - db-rollback
+      - db-migrate-reset
+      - db-check-schema
+      - db-migrate-non-superuser
+      - workhorse-verify
+      - workhorse-logging-field-validator
+      - workhorse-test
+      - fast-spec
+      - rspec
+      - jest
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Resolve final status
+        id: resolve
+        if: always()
+        shell: bash
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          status="success"
+          if jq -e 'to_entries[] | select(.key != "callback-start" and .value.result == "failure")' <<< "$NEEDS_JSON" >/dev/null; then
+            status="failure"
+          elif jq -e 'to_entries[] | select(.key != "callback-start" and .value.result == "cancelled")' <<< "$NEEDS_JSON" >/dev/null; then
+            status="cancelled"
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+          echo "=== Uppfinna job results ==="
+          jq -r 'to_entries[] | select(.key != "callback-start") | "\(.value.result)\t\(.key)"' <<< "$NEEDS_JSON"
+
+      - name: Report final Uppfinna status to Foreman
+        if: always()
+        shell: bash
+        env:
+          PIPELINE_ID: ${{ needs.callback-start.outputs.pipeline_id }}
+          FOREMAN_BASE_URL: ${{ vars.FOREMAN_BASE_URL || 'https://builds.projecttick.net' }}
+          FOREMAN_API_TOKEN: ${{ secrets.FOREMAN_API_TOKEN || '' }}
+          PIPELINE_STATUS: ${{ steps.resolve.outputs.status || 'failure' }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$PIPELINE_ID" || -z "$FOREMAN_API_TOKEN" ]]; then
+            echo "Callback pipeline/admin token missing; skipping status report."
+            exit 0
+          fi
+          payload="$(printf '{\"status\":\"%s\"}' "$PIPELINE_STATUS")"
+          curl \
+            --silent --show-error \
+            --retry 3 --retry-all-errors --max-time 15 \
+            --request POST \
+            --header "Authorization: Bearer $FOREMAN_API_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "$payload" \
+            "${FOREMAN_BASE_URL%/}/api/pipelines/${PIPELINE_ID}/admin-callback/status" \
+            || echo "::warning::Final status callback failed (non-fatal)"
+
+      - name: Enforce verdict
+        if: always()
+        shell: bash
+        env:
+          PIPELINE_STATUS: ${{ steps.resolve.outputs.status }}
+        run: |
+          set -euo pipefail
+          if [ "$PIPELINE_STATUS" != "success" ]; then
+            echo "Uppfinna pipeline ${PIPELINE_STATUS}."
+            exit 1
+          fi
+          echo "Uppfinna pipeline passed."
