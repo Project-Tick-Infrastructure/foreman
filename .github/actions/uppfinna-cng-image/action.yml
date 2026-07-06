@@ -29,7 +29,7 @@ inputs:
   ci-registry-image:
     default: "registry.projecttick.org/project-tick/uppfinna/cng"
   gitlab-namespace:
-    default: "project-tick"
+    default: "project-tick/uppfinna/forge"
   ce-project:
     default: "gitlab"
   ci-api-v4-url:
@@ -37,9 +37,9 @@ inputs:
   ci-server-fqdn:
     default: "git.projecttick.org"
   gitaly-git-repo-url:
-    default: "https://gitlab.com/gitlab-org/gitaly.git"
+    default: "https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git"
   assets-image-registry-prefix:
-    default: "registry.gitlab.com/gitlab-org"
+    default: "registry.projecttick.org/project-tick/uppfinna"
 
 runs:
   using: composite

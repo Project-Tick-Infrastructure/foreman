@@ -78,12 +78,12 @@ jobs:
           fetch-artifacts-pat: ${{ secrets.CNG_FETCH_ARTIFACTS_PAT }}
           ci-registry: ${{ vars.CNG_REGISTRY || 'registry.projecttick.org' }}
           ci-registry-image: ${{ vars.CNG_REGISTRY_IMAGE || 'registry.projecttick.org/project-tick/uppfinna/cng' }}
-          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick' }}
-          ce-project: ${{ vars.CNG_CE_PROJECT || 'gitlab' }}
+          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick/uppfinna/forge' }}
+          ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://gitlab.com/gitlab-org/gitaly.git' }}
-          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.gitlab.com/gitlab-org' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-one:
     name: "phase-one: ${{ matrix.image }}"
@@ -116,12 +116,12 @@ jobs:
           fetch-artifacts-pat: ${{ secrets.CNG_FETCH_ARTIFACTS_PAT }}
           ci-registry: ${{ vars.CNG_REGISTRY || 'registry.projecttick.org' }}
           ci-registry-image: ${{ vars.CNG_REGISTRY_IMAGE || 'registry.projecttick.org/project-tick/uppfinna/cng' }}
-          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick' }}
-          ce-project: ${{ vars.CNG_CE_PROJECT || 'gitlab' }}
+          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick/uppfinna/forge' }}
+          ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://gitlab.com/gitlab-org/gitaly.git' }}
-          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.gitlab.com/gitlab-org' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-two:
     name: "phase-two: gitlab-base"
@@ -145,12 +145,12 @@ jobs:
           fetch-artifacts-pat: ${{ secrets.CNG_FETCH_ARTIFACTS_PAT }}
           ci-registry: ${{ vars.CNG_REGISTRY || 'registry.projecttick.org' }}
           ci-registry-image: ${{ vars.CNG_REGISTRY_IMAGE || 'registry.projecttick.org/project-tick/uppfinna/cng' }}
-          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick' }}
-          ce-project: ${{ vars.CNG_CE_PROJECT || 'gitlab' }}
+          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick/uppfinna/forge' }}
+          ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://gitlab.com/gitlab-org/gitaly.git' }}
-          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.gitlab.com/gitlab-org' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-three:
     name: "phase-three: ${{ matrix.image }}"
@@ -178,12 +178,12 @@ jobs:
           fetch-artifacts-pat: ${{ secrets.CNG_FETCH_ARTIFACTS_PAT }}
           ci-registry: ${{ vars.CNG_REGISTRY || 'registry.projecttick.org' }}
           ci-registry-image: ${{ vars.CNG_REGISTRY_IMAGE || 'registry.projecttick.org/project-tick/uppfinna/cng' }}
-          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick' }}
-          ce-project: ${{ vars.CNG_CE_PROJECT || 'gitlab' }}
+          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick/uppfinna/forge' }}
+          ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://gitlab.com/gitlab-org/gitaly.git' }}
-          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.gitlab.com/gitlab-org' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-four:
     name: "phase-four: ${{ matrix.image }}"
@@ -216,12 +216,12 @@ jobs:
           fetch-artifacts-pat: ${{ secrets.CNG_FETCH_ARTIFACTS_PAT }}
           ci-registry: ${{ vars.CNG_REGISTRY || 'registry.projecttick.org' }}
           ci-registry-image: ${{ vars.CNG_REGISTRY_IMAGE || 'registry.projecttick.org/project-tick/uppfinna/cng' }}
-          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick' }}
-          ce-project: ${{ vars.CNG_CE_PROJECT || 'gitlab' }}
+          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick/uppfinna/forge' }}
+          ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://gitlab.com/gitlab-org/gitaly.git' }}
-          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.gitlab.com/gitlab-org' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-five:
     name: "phase-five: gitlab-rails-ce"
@@ -245,12 +245,12 @@ jobs:
           fetch-artifacts-pat: ${{ secrets.CNG_FETCH_ARTIFACTS_PAT }}
           ci-registry: ${{ vars.CNG_REGISTRY || 'registry.projecttick.org' }}
           ci-registry-image: ${{ vars.CNG_REGISTRY_IMAGE || 'registry.projecttick.org/project-tick/uppfinna/cng' }}
-          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick' }}
-          ce-project: ${{ vars.CNG_CE_PROJECT || 'gitlab' }}
+          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick/uppfinna/forge' }}
+          ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://gitlab.com/gitlab-org/gitaly.git' }}
-          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.gitlab.com/gitlab-org' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-six:
     name: "phase-six: ${{ matrix.image }}"
@@ -278,9 +278,9 @@ jobs:
           fetch-artifacts-pat: ${{ secrets.CNG_FETCH_ARTIFACTS_PAT }}
           ci-registry: ${{ vars.CNG_REGISTRY || 'registry.projecttick.org' }}
           ci-registry-image: ${{ vars.CNG_REGISTRY_IMAGE || 'registry.projecttick.org/project-tick/uppfinna/cng' }}
-          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick' }}
-          ce-project: ${{ vars.CNG_CE_PROJECT || 'gitlab' }}
+          gitlab-namespace: ${{ vars.CNG_GITLAB_NAMESPACE || 'project-tick/uppfinna/forge' }}
+          ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://gitlab.com/gitlab-org/gitaly.git' }}
-          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.gitlab.com/gitlab-org' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
