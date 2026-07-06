@@ -63,25 +63,26 @@ jobs:
       fail-fast: false
       # Heavy levels are split across several nodes via Knapsack
       # (CI_NODE_TOTAL / CI_NODE_INDEX) to keep each node under the 6h runner
-      # limit. `node_index` is 1-based to match the `i/N` job name; it is
-      # converted to Knapsack's 0-based CI_NODE_INDEX in the env block below.
+      # limit. `ci_node_index` is 0-based (as Knapsack expects) and is wired
+      # directly to CI_NODE_INDEX in the env block; the `i/N` in job_name is
+      # only for human readability.
       matrix:
         include:
-          - { job_name: "rspec migration pg16 1/1", level: migration, node_index: 1, node_total: 1, opts: "--tag ~zoekt --tag ~click_house" }
-          - { job_name: "rspec background_migration pg16 1/1", level: background_migration, node_index: 1, node_total: 1, opts: "--tag ~zoekt --tag ~click_house" }
+          - { job_name: "rspec migration pg16 1/1", level: migration, ci_node_index: 0, node_total: 1, opts: "--tag ~zoekt --tag ~click_house" }
+          - { job_name: "rspec background_migration pg16 1/1", level: background_migration, ci_node_index: 0, node_total: 1, opts: "--tag ~zoekt --tag ~click_house" }
 
-          - { job_name: "rspec unit pg16 1/4", level: unit, node_index: 1, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
-          - { job_name: "rspec unit pg16 2/4", level: unit, node_index: 2, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
-          - { job_name: "rspec unit pg16 3/4", level: unit, node_index: 3, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
-          - { job_name: "rspec unit pg16 4/4", level: unit, node_index: 4, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
+          - { job_name: "rspec unit pg16 1/4", level: unit, ci_node_index: 0, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
+          - { job_name: "rspec unit pg16 2/4", level: unit, ci_node_index: 1, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
+          - { job_name: "rspec unit pg16 3/4", level: unit, ci_node_index: 2, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
+          - { job_name: "rspec unit pg16 4/4", level: unit, ci_node_index: 3, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
 
-          - { job_name: "rspec integration pg16 1/2", level: integration, node_index: 1, node_total: 2, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
-          - { job_name: "rspec integration pg16 2/2", level: integration, node_index: 2, node_total: 2, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
+          - { job_name: "rspec integration pg16 1/2", level: integration, ci_node_index: 0, node_total: 2, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
+          - { job_name: "rspec integration pg16 2/2", level: integration, ci_node_index: 1, node_total: 2, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
 
-          - { job_name: "rspec system pg16 1/4", level: system, node_index: 1, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
-          - { job_name: "rspec system pg16 2/4", level: system, node_index: 2, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
-          - { job_name: "rspec system pg16 3/4", level: system, node_index: 3, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
-          - { job_name: "rspec system pg16 4/4", level: system, node_index: 4, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
+          - { job_name: "rspec system pg16 1/4", level: system, ci_node_index: 0, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
+          - { job_name: "rspec system pg16 2/4", level: system, ci_node_index: 1, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
+          - { job_name: "rspec system pg16 3/4", level: system, ci_node_index: 2, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
+          - { job_name: "rspec system pg16 4/4", level: system, ci_node_index: 3, node_total: 4, opts: "--tag ~level:background_migration --tag ~click_house --tag ~duo_workflow_service --tag ~partition_tz" }
     env:
       GITLAB_DIR: ${{ inputs.source-repository != '' && '.' || 'gitlab' }}
       RAILS_ENV: test
@@ -106,10 +107,9 @@ jobs:
       RSPEC_LAST_RUN_RESULTS_FILE: "rspec/rspec_last_run_results.txt"
       KNAPSACK_RSPEC_SUITE_REPORT_PATH: "knapsack/report-master.json"
       FLAKY_RSPEC_SUITE_REPORT_PATH: "rspec/flaky/report-suite.json"
-      # Knapsack splits the suite across nodes. CI_NODE_INDEX is 0-based, while
-      # the matrix uses a 1-based node_index to match the `i/N` job name.
+      # Knapsack splits the suite across nodes; CI_NODE_INDEX is 0-based.
       CI_NODE_TOTAL: "${{ matrix.node_total }}"
-      CI_NODE_INDEX: "${{ matrix.node_index - 1 }}"
+      CI_NODE_INDEX: "${{ matrix.ci_node_index }}"
       # Unique per matrix node so per-node RSpec report files (which embed
       # CI_JOB_ID) do not collide when splitting a level across nodes.
       CI_JOB_ID: "${{ github.run_id }}-${{ strategy.job-index }}"
