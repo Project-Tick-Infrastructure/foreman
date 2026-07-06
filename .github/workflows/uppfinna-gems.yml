@@ -206,7 +206,7 @@ jobs:
               # otherwise installed on the GHA runner, so `bundle exec rake`
               # fails with "Could not find rake-13.2.1". Install it up front so
               # the fixture's bundle resolves.
-              fixture_rake_version="$(grep -A1 '^GEM' "gems/gitlab-backup-cli/spec/fixtures/gitlab_fake/Gemfile.lock" | grep -oE 'rake \([0-9.]+\)' | grep -oE '[0-9.]+' || true)"
+              fixture_rake_version="$(grep -oE 'rake \([0-9.]+\)' "gems/gitlab-backup-cli/spec/fixtures/gitlab_fake/Gemfile.lock" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
               if [ -n "${fixture_rake_version}" ]; then
                 gem install rake --version "${fixture_rake_version}" --no-document
               fi
@@ -238,7 +238,7 @@ jobs:
               # port does not define). Export it here, derived from the bundler
               # actually installed by "Bundle install", so `set -u` in the
               # script does not abort on an unbound variable.
-              BUNDLER_VERSION="$(bundler --version | awk '{print $3}')"
+              BUNDLER_VERSION="$(bundler -v | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
               export BUNDLER_VERSION
               pushd test/project_with_checksum_lock && scripts/test
               ;;
