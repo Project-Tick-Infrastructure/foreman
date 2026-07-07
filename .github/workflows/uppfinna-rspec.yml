@@ -223,67 +223,13 @@ jobs:
         run: scripts/gitaly-test-spawn
 
       - name: Run RSpec
-        env:
-          FOREMAN_PLAN: ${{ inputs.foreman-plan }}
-          MATRIX_LEVEL: ${{ matrix.level }}
         run: |
           mkdir -p rspec knapsack rspec/flaky
-          # Needed so `**` in the selected spec globs expands recursively and
-          # non-matching globs expand to nothing rather than the literal string.
-          shopt -s globstar nullglob
           source scripts/utils.sh
           source scripts/rspec_helpers.sh
           export RSPEC_SKIPPED_TESTS_REPORT_PATH="rspec/skipped_tests-${CI_JOB_ID}.txt"
           export RSPEC_RETRIED_TESTS_REPORT_PATH="rspec/retried_tests-${CI_JOB_ID}.txt"
-
-          # Predictive test selection: when Foreman resolved a reliable diff it
-          # emits test_selection.advisory=false plus a list of spec globs. In
-          # that case run only the selected specs (sharded across this level's
-          # nodes) instead of the full Knapsack suite. Any of: no plan, advisory
-          # plan, empty spec list, no matching files, or a non-unit/integration
-          # level falls back to the full parallelized run.
-          selection_active="false"
-          selected_files=""
-          if [ -n "${FOREMAN_PLAN}" ] && command -v jq >/dev/null 2>&1 \
-             && { [ "${MATRIX_LEVEL}" = "unit" ] || [ "${MATRIX_LEVEL}" = "integration" ]; } \
-             && [ "$(printf '%s' "${FOREMAN_PLAN}" | jq -r '(.test_selection.advisory == false)' 2>/dev/null || echo false)" = "true" ]; then
-            mapfile -t globs < <(printf '%s' "${FOREMAN_PLAN}" | jq -r '.test_selection.specs[]? // empty' 2>/dev/null)
-            matched=()
-            for g in "${globs[@]}"; do
-              while IFS= read -r f; do
-                [ -n "$f" ] && matched+=("$f")
-              done < <(compgen -G "$g" || true)
-            done
-            if [ "${#matched[@]}" -gt 0 ]; then
-              selection_active="true"
-              # Deterministic sharding across this level's nodes by list index.
-              mapfile -t sorted < <(printf '%s\n' "${matched[@]}" | sort -u)
-              node_total="${CI_NODE_TOTAL:-1}"
-              node_index="${CI_NODE_INDEX:-0}"
-              shard=()
-              for i in "${!sorted[@]}"; do
-                if [ "$(( i % node_total ))" -eq "${node_index}" ]; then
-                  shard+=("${sorted[$i]}")
-                fi
-              done
-              selected_files="${shard[*]}"
-              printf 'Predictive test selection active: %s selected spec files, %s on this node (%s/%s).\n' \
-                "${#sorted[@]}" "${#shard[@]}" "$(( node_index + 1 ))" "${node_total}"
-            else
-              echo "Predictive test selection: no files matched the selected globs; running full suite."
-            fi
-          fi
-
-          if [ "${selection_active}" = "true" ]; then
-            if [ -n "${selected_files}" ]; then
-              # shellcheck disable=SC2086
-              bin/rspec --fail-fast="${RSPEC_FAIL_FAST_THRESHOLD}" ${RSPEC_OPTS} ${selected_files}
-            else
-              echo "Predictive test selection active but no specs for this shard; nothing to run."
-            fi
-          else
-            rspec_parallelized_job "--fail-fast=${RSPEC_FAIL_FAST_THRESHOLD} ${RSPEC_OPTS}"
-          fi
+          rspec_parallelized_job "--fail-fast=${RSPEC_FAIL_FAST_THRESHOLD} ${RSPEC_OPTS}"
 
       - name: Upload RSpec artifacts
         if: always()
