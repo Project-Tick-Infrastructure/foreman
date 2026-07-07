@@ -185,6 +185,18 @@ jobs:
           restore-keys: |
             uppfinna-tmp-tests-${{ runner.os }}-
 
+      # Bootsnap's compile cache turns the ~60s cold Rails/spec boot into ~18s.
+      # Share it across jobs; restore-keys let a job start from the newest
+      # available cache and top it up.
+      - name: Cache bootsnap
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.GITLAB_DIR }}/tmp/cache/bootsnap
+          key: uppfinna-bootsnap-${{ runner.os }}-${{ hashFiles(format('{0}/Gemfile.lock', env.GITLAB_DIR)) }}-${{ github.sha }}
+          restore-keys: |
+            uppfinna-bootsnap-${{ runner.os }}-${{ hashFiles(format('{0}/Gemfile.lock', env.GITLAB_DIR)) }}-
+            uppfinna-bootsnap-${{ runner.os }}-
+
       - name: Prepare build
         run: source scripts/prepare_build.sh
 
