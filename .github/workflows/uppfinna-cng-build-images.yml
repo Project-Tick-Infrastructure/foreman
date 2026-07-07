@@ -82,7 +82,7 @@ jobs:
           ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/git.git' }}
           assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-one:
@@ -120,7 +120,7 @@ jobs:
           ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/git.git' }}
           assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-two:
@@ -149,7 +149,7 @@ jobs:
           ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/git.git' }}
           assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-three:
@@ -182,7 +182,7 @@ jobs:
           ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/git.git' }}
           assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-four:
@@ -220,7 +220,7 @@ jobs:
           ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/git.git' }}
           assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-five:
@@ -249,7 +249,7 @@ jobs:
           ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/git.git' }}
           assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}
 
   phase-six:
@@ -282,5 +282,5 @@ jobs:
           ce-project: ${{ vars.CNG_CE_PROJECT || 'uppfinna-project' }}
           ci-api-v4-url: ${{ vars.CNG_API_V4_URL || 'https://git.projecttick.org/api/v4' }}
           ci-server-fqdn: ${{ vars.CNG_SERVER_FQDN || 'git.projecttick.org' }}
-          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git' }}
+          gitaly-git-repo-url: ${{ vars.CNG_GITALY_GIT_REPO_URL || 'https://git.projecttick.org/project-tick/uppfinna/forge/git.git' }}
           assets-image-registry-prefix: ${{ vars.CNG_ASSETS_IMAGE_REGISTRY_PREFIX || 'registry.projecttick.org/project-tick/uppfinna' }}

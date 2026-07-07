@@ -37,7 +37,7 @@ inputs:
   ci-server-fqdn:
     default: "git.projecttick.org"
   gitaly-git-repo-url:
-    default: "https://git.projecttick.org/project-tick/uppfinna/forge/gitaly.git"
+    default: "https://git.projecttick.org/project-tick/uppfinna/forge/git.git"
   assets-image-registry-prefix:
     default: "registry.projecttick.org/project-tick/uppfinna"
 
