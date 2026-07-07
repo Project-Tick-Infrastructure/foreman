@@ -116,8 +116,11 @@ runs:
         GM_VERSION: "1.3.47"
         GM_CHECKSUM_SHA256: "95fb682dab0206a9db168d065963f4ffdf5a60b0b2a375aca1f4492fb18d0627"
         GM_SOURCE_URL: "https://sourceforge.net/projects/graphicsmagick/files/graphicsmagick/1.3.47/GraphicsMagick-1.3.47.tar.xz/download"
-        GITLAB_LOGGER_VERSION: "v4.0.1"
-        GITLAB_LOGGER_SHA256: "f3b918da62af7fdb8787981e116e44b48023fc9ef842976519b5ee0731df4ef9"
+        GITLAB_LOGGER_VERSION: "master"
+        # The forge mirror is tag-less, so track the master branch like the other
+        # forge-based components. On-the-fly archives have no stable checksum, so
+        # the SHA256 must be empty to skip verification (see gitlab-logger download).
+        GITLAB_LOGGER_SHA256: ""
         GOMPLATE_VERSION: "v5.0.0"
         GOMPLATE_SHA256: "b4f24768c994dd62c95d7243cef4dc2354b47976fa8fbbda3889aeade8e39d69"
         EXIFTOOL_VERSION: "13.44"
