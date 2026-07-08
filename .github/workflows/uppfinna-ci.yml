@@ -201,6 +201,9 @@ jobs:
     with:
       gitlab-version: ${{ needs.build-cng.outputs.gitlab_version }}
       image-tag: ${{ needs.build-cng.outputs.image_tag }}
+      # Only master builds publish the stable `master` tag; MR/feature builds
+      # still build and push their unique SHA tag but must not overwrite it.
+      is-default-branch: ${{ (inputs.event-name != 'pull_request' && (inputs.source-ref == '' || endsWith(inputs.source-ref, '/master') || inputs.source-ref == 'master')) && 'true' || 'false' }}
       cng-repository: 'https://git.projecttick.org/project-tick/uppfinna/cng'
     secrets: inherit
 

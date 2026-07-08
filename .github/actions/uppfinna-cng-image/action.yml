@@ -8,6 +8,11 @@ inputs:
     default: "master"
   image-tag:
     default: ""
+  # "true" only for default-branch (master) builds. When true the build also
+  # publishes the stable tag (e.g. master); MR/feature builds set "false" so
+  # they only push the unique SHA tag and never overwrite the master tag.
+  is-default-branch:
+    default: "true"
   gitaly-version:
     default: ""
   gitlab-shell-version:
@@ -153,12 +158,13 @@ runs:
         # CI_COMMIT_REF_SLUG keeps the caller-provided tag (a commit SHA when
         # image-tag is set) so every build still gets a unique, traceable tag.
         CI_COMMIT_REF_SLUG: ${{ inputs.image-tag || 'master' }}
-        # CI_COMMIT_REF_NAME must equal CI_DEFAULT_BRANCH so build.sh's
-        # is_default_branch() is true and push_tags also publishes the stable
-        # version tag (e.g. 'master' for rails/kas/pages/registry). Without this
-        # the build was treated as a feature branch and only the SHA tag was
-        # pushed, leaving no stable tag to pin the SaaS Helm deploy to.
-        CI_COMMIT_REF_NAME: master
+        # On default-branch (master) builds, set CI_COMMIT_REF_NAME to
+        # CI_DEFAULT_BRANCH so build.sh's is_default_branch() is true and
+        # push_tags also publishes the stable tag (e.g. master). On MR/feature
+        # builds keep it as the SHA so is_default_branch() is false: the build
+        # still runs and pushes its unique SHA tag, but never overwrites the
+        # shared master tag that the SaaS Helm deploy is pinned to.
+        CI_COMMIT_REF_NAME: ${{ inputs.is-default-branch == 'true' && 'master' || (inputs.image-tag || 'master') }}
         CI_DEFAULT_BRANCH: master
         CI_PROJECT_DIR: ${{ github.workspace }}
         FETCH_DEV_ARTIFACTS_PAT: ${{ inputs.fetch-artifacts-pat }}

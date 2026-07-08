@@ -9,6 +9,9 @@ on:
       image-tag:
         type: string
         default: ""
+      is-default-branch:
+        type: string
+        default: "true"
       cng-ref:
         type: string
         default: "master"
@@ -38,6 +41,9 @@ on:
       image-tag:
         type: string
         default: ""
+      is-default-branch:
+        type: string
+        default: "true"
       cng-ref:
         type: string
         default: "master"
@@ -68,6 +74,7 @@ jobs:
           image: ${{ matrix.image }}
           gitlab-version: ${{ inputs.gitlab-version }}
           image-tag: ${{ inputs.image-tag }}
+          is-default-branch: ${{ inputs.is-default-branch }}
           gitaly-version: ${{ inputs.gitaly-version }}
           gitlab-shell-version: ${{ inputs.gitlab-shell-version }}
           gitlab-pages-version: ${{ inputs.gitlab-pages-version }}
@@ -106,6 +113,7 @@ jobs:
           image: ${{ matrix.image }}
           gitlab-version: ${{ inputs.gitlab-version }}
           image-tag: ${{ inputs.image-tag }}
+          is-default-branch: ${{ inputs.is-default-branch }}
           gitaly-version: ${{ inputs.gitaly-version }}
           gitlab-shell-version: ${{ inputs.gitlab-shell-version }}
           gitlab-pages-version: ${{ inputs.gitlab-pages-version }}
@@ -140,6 +148,7 @@ jobs:
           image: gitlab-base
           gitlab-version: ${{ inputs.gitlab-version }}
           image-tag: ${{ inputs.image-tag }}
+          is-default-branch: ${{ inputs.is-default-branch }}
           registry-user: ${{ secrets.CNG_REGISTRY_USER }}
           registry-password: ${{ secrets.CNG_REGISTRY_PASSWORD }}
           fetch-artifacts-pat: ${{ secrets.CNG_FETCH_ARTIFACTS_PAT }}
@@ -173,6 +182,7 @@ jobs:
           image: ${{ matrix.image }}
           gitlab-version: ${{ inputs.gitlab-version }}
           image-tag: ${{ inputs.image-tag }}
+          is-default-branch: ${{ inputs.is-default-branch }}
           registry-user: ${{ secrets.CNG_REGISTRY_USER }}
           registry-password: ${{ secrets.CNG_REGISTRY_PASSWORD }}
           fetch-artifacts-pat: ${{ secrets.CNG_FETCH_ARTIFACTS_PAT }}
@@ -206,6 +216,7 @@ jobs:
           image: ${{ matrix.image }}
           gitlab-version: ${{ inputs.gitlab-version }}
           image-tag: ${{ inputs.image-tag }}
+          is-default-branch: ${{ inputs.is-default-branch }}
           gitaly-version: ${{ inputs.gitaly-version }}
           gitlab-shell-version: ${{ inputs.gitlab-shell-version }}
           gitlab-pages-version: ${{ inputs.gitlab-pages-version }}
@@ -240,6 +251,7 @@ jobs:
           image: gitlab-rails-ce
           gitlab-version: ${{ inputs.gitlab-version }}
           image-tag: ${{ inputs.image-tag }}
+          is-default-branch: ${{ inputs.is-default-branch }}
           registry-user: ${{ secrets.CNG_REGISTRY_USER }}
           registry-password: ${{ secrets.CNG_REGISTRY_PASSWORD }}
           fetch-artifacts-pat: ${{ secrets.CNG_FETCH_ARTIFACTS_PAT }}
@@ -273,6 +285,7 @@ jobs:
           image: ${{ matrix.image }}
           gitlab-version: ${{ inputs.gitlab-version }}
           image-tag: ${{ inputs.image-tag }}
+          is-default-branch: ${{ inputs.is-default-branch }}
           registry-user: ${{ secrets.CNG_REGISTRY_USER }}
           registry-password: ${{ secrets.CNG_REGISTRY_PASSWORD }}
           fetch-artifacts-pat: ${{ secrets.CNG_FETCH_ARTIFACTS_PAT }}
